@@ -7,11 +7,51 @@ STATE_DIR="$HOME/.cache/matugen-plasma"
 PALETTE_STATE="$STATE_DIR/last-palette.txt"
 THEME_STATE="$STATE_DIR/last-theme.txt"
 
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
+
+# Plasma writes its config while logging out; applying themes then races with
+# session teardown and can abort a restart. Do nothing once a shutdown is near.
+session_shutting_down() {
+  local session state uid arg startup=0
+  [[ -e /run/systemd/shutdown/scheduled ]] && return 0
+  for arg in "$@"; do
+    [[ "$arg" == startup ]] && startup=1
+  done
+  if command -v systemctl >/dev/null 2>&1; then
+    [[ "$(systemctl --user is-system-running 2>/dev/null)" == "stopping" ]] && return 0
+    [[ "$(systemctl is-system-running 2>/dev/null)" == "stopping" ]] && return 0
+  fi
+  if command -v loginctl >/dev/null 2>&1; then
+    uid="$(id -u 2>/dev/null || true)"
+    [[ -n "$uid" ]] || return 1
+    session="$(loginctl list-sessions --no-legend 2>/dev/null | awk -v u="$uid" '$2==u {print $1; exit}' || true)"
+    if [[ -n "$session" ]]; then
+      state="$(loginctl show-session "$session" -p State --value 2>/dev/null || true)"
+      [[ "$state" == "closing" ]] && return 0
+    fi
+  fi
+  if (( ! startup )); then
+    # The desktop is going away: the compositor has dropped its display socket
+    # (plasma-apply-colorscheme fails with "xcb_connect() failed" then).
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+      [[ -e "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] || return 0
+    elif [[ -n "${DISPLAY:-}" ]]; then
+      [[ -e "/tmp/.X11-unix/X${DISPLAY#*:}" ]] || return 0
+    else
+      return 0
+    fi
+  fi
+  return 1
+}
+
+if session_shutting_down "$@"; then
+  log "Session is shutting down; skipping theme sync"
+  exit 0
+fi
+
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/apply.lock"
 flock -x 9
-
-log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 
 usage() {
   printf 'Usage: %s [light|dark] [startup|wallpaper|scheme|manual] [--force]\n' "${0##*/}" >&2
@@ -373,7 +413,7 @@ log "Generating $mode theme from: $source"
 attempt=0
 while true; do
   attempt=$((attempt + 1))
-  if ! matugen -c "$MATUGEN_CONFIG" "${matugen_source[@]}" --mode "$mode" --prefer saturation; then
+  if ! matugen -c "$MATUGEN_CONFIG" "${matugen_source[@]}" --mode "$mode" --source-color-index 0 -t scheme-fidelity; then
     log "matugen failed"
     exit 1
   fi
