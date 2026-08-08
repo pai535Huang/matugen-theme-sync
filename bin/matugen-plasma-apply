@@ -1,0 +1,424 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLASMA_CONFIG="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+MATUGEN_CONFIG="$HOME/.config/matugen/config.toml"
+STATE_DIR="$HOME/.cache/matugen-plasma"
+PALETTE_STATE="$STATE_DIR/last-palette.txt"
+THEME_STATE="$STATE_DIR/last-theme.txt"
+
+mkdir -p "$STATE_DIR"
+exec 9>"$STATE_DIR/apply.lock"
+flock -x 9
+
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
+
+usage() {
+  printf 'Usage: %s [light|dark] [startup|wallpaper|scheme|manual] [--force]\n' "${0##*/}" >&2
+}
+
+current_mode() {
+  local scheme
+  if command -v kreadconfig6 >/dev/null 2>&1; then
+    scheme="$(kreadconfig6 --file kdeglobals --group General --key ColorScheme 2>/dev/null || true)"
+  else
+    scheme="$(python3 - "$HOME/.config/kdeglobals" <<'PYEOF'
+import configparser
+import sys
+
+config = configparser.ConfigParser(interpolation=None, strict=False)
+config.optionxform = str
+config.read(sys.argv[1])
+print(config.get('General', 'ColorScheme', fallback=''))
+PYEOF
+)"
+  fi
+
+  case "$scheme" in
+    MatugenLight) printf '%s\n' light ;;
+    MatugenDark) printf '%s\n' dark ;;
+    *) return 1 ;;
+  esac
+}
+
+# Resolve the current desktop wallpaper source from Plasma's containment config.
+# Output is "img:<path-or-url>" or "col:#RRGGBB".
+get_wallpaper_source() {
+  python3 - "$PLASMA_CONFIG" <<'PYEOF'
+import glob
+import os
+import re
+import sys
+import urllib.parse
+
+cfg_path = sys.argv[1]
+sections = {}
+current = None
+with open(cfg_path, errors='replace') as config:
+    for line in config:
+        line = line.rstrip('\n')
+        if line.startswith('[') and line.endswith(']'):
+            current = line[1:-1]
+            sections.setdefault(current, {})
+        elif current and '=' in line and not line.startswith('ItemGeometries'):
+            key, value = line.split('=', 1)
+            sections[current][key.strip()] = value.strip()
+
+def is_desktop(data):
+    return data.get('plugin', '') in ('org.kde.desktopcontainment', 'org.kde.plasma.folder')
+
+def pick_from_paths(paths):
+    files = []
+    for path in paths:
+        if path.startswith('file://'):
+            path = path[7:]
+        path = os.path.expanduser(urllib.parse.unquote(path))
+        if os.path.isfile(path):
+            files.append(path)
+        elif os.path.isdir(path):
+            files.extend(glob.glob(os.path.join(path, '**', '*'), recursive=True))
+    return [path for path in files if path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp'))]
+
+desktops = []
+for section, data in sections.items():
+    match = re.match(r'^Containments\]\[(\d+)$', section)
+    if match and is_desktop(data) and data.get('wallpaperplugin'):
+        desktops.append((int(match.group(1)), data))
+desktops.sort(key=lambda item: item[0])
+
+for containment_id, data in desktops:
+    plugin = data['wallpaperplugin']
+    general = f'Containments][{containment_id}][Wallpaper][{plugin}][General'
+    wallpaper = sections.get(general, {})
+    if plugin == 'org.kde.image':
+        if 'Image' in wallpaper:
+            path = wallpaper['Image']
+            if path.startswith('file://'):
+                path = urllib.parse.unquote(path[7:])
+                if os.path.isfile(path):
+                    print('img:' + path)
+                    sys.exit(0)
+                if os.path.isdir(path):
+                    images = pick_from_paths([path])
+                    if images:
+                        images.sort(key=lambda image: os.path.getsize(image), reverse=True)
+                        print('img:' + images[0])
+                        sys.exit(0)
+            elif path.startswith(('http://', 'https://')):
+                print('img:' + path)
+                sys.exit(0)
+            elif os.path.isfile(os.path.expanduser(path)):
+                print('img:' + os.path.expanduser(path))
+                sys.exit(0)
+    elif plugin == 'org.kde.slideshow':
+        paths = []
+        for key in ('SlidePaths', 'Image', 'CurrentImage'):
+            if key in wallpaper:
+                paths.extend(part.strip() for part in wallpaper[key].split(',') if part.strip())
+        images = pick_from_paths(paths)
+        if images:
+            print('img:' + images[0])
+            sys.exit(0)
+    elif plugin == 'org.kde.color':
+        color = wallpaper.get('Color', '')
+        match = re.search(r'#?[0-9a-fA-F]{6}', color)
+        if match:
+            print('col:#' + match.group(0).lstrip('#'))
+            sys.exit(0)
+        match = re.match(r'\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)', color)
+        if match:
+            print('col:#%02x%02x%02x' % tuple(int(value) for value in match.groups()))
+            sys.exit(0)
+    else:
+        for key in ('lastValidImagePath', 'Image', 'image'):
+            if key not in wallpaper:
+                continue
+            path = wallpaper[key]
+            if path.startswith(('http://', 'https://')):
+                print('img:' + path)
+                sys.exit(0)
+            if path.startswith('file://'):
+                path = urllib.parse.unquote(path[7:])
+            path = os.path.expanduser(path)
+            if os.path.isfile(path):
+                print('img:' + path)
+                sys.exit(0)
+
+for base in ('~/Pictures/Wallpapers', '~/Pictures', '~/.local/share/wallpapers'):
+    images = pick_from_paths([os.path.expanduser(base)])
+    if images:
+        print('img:' + images[0])
+        sys.exit(0)
+sys.exit(1)
+PYEOF
+}
+
+resolve_image() {
+  local source="$1" local_image="${1#img:}" extension url
+  if [[ "$local_image" == http* ]]; then
+    url="$local_image"
+    extension="${url##*.}"
+    extension="${extension%%\?*}"
+    [[ "$extension" =~ ^(jpg|jpeg|png|webp|bmp)$ ]] || extension="jpg"
+    local_image="$STATE_DIR/current.$extension"
+    if ! curl -fsSL --max-time 40 "$url" -o "$local_image" 2>/dev/null; then
+      log "Failed to download wallpaper: $source"
+      return 1
+    fi
+  fi
+  if [[ ! -f "$local_image" ]]; then
+    log "Wallpaper file not found: $local_image"
+    return 1
+  fi
+  printf '%s\n' "$local_image"
+}
+
+set_gsetting() {
+  command -v gsettings >/dev/null 2>&1 || return 0
+  if ! gsettings set "$@" >/dev/null 2>&1; then
+    log "Could not set GSettings key: $1 $2"
+    return 1
+  fi
+}
+
+apply_gtk_mode() {
+  local mode="$1" gtk_theme color_scheme failed=0
+  if [[ "$mode" == light ]]; then
+    gtk_theme="adw-gtk3"
+    color_scheme="prefer-light"
+  else
+    gtk_theme="adw-gtk3-dark"
+    color_scheme="prefer-dark"
+  fi
+
+  set_gsetting org.gnome.desktop.interface color-scheme "$color_scheme" || failed=1
+  # Re-selecting the theme makes GTK3 notice regenerated colors.css files.
+  set_gsetting org.gnome.desktop.interface gtk-theme "" || true
+  set_gsetting org.gnome.desktop.interface gtk-theme "$gtk_theme" || failed=1
+  return "$failed"
+}
+
+update_starship_palette() {
+  local generated="$HOME/.config/matugen/themes/starship-colors.toml"
+  local config="$HOME/.config/starship.toml"
+  local palette_block
+
+  [[ -f "$generated" && -f "$config" ]] || return 0
+  palette_block="$(awk '
+    /^\[palettes\.[^]]+\]/ { in_palette = 1; print; next }
+    in_palette && /^\[/ { exit }
+    in_palette && /^color[0-9]/ { print }
+  ' "$generated")"
+  [[ -n "$palette_block" ]] || return 0
+
+  awk -v new="$palette_block" '
+    BEGIN { in_block = 0; in_palette = 0 }
+    /^# BEGIN MATUGEN PALETTE$/ { in_block = 1; print; next }
+    /^# END MATUGEN PALETTE$/ { in_block = 0; print; next }
+    in_block && /^\[palettes\.[^]]+\]$/ {
+      in_palette = 1
+      print new
+      next
+    }
+    in_block && in_palette && /^\[/ { in_palette = 0 }
+    in_block && in_palette { next }
+    { print }
+  ' "$config" > "$config.tmp"
+  mv "$config.tmp" "$config"
+}
+
+reload_tmux() {
+  command -v tmux >/dev/null 2>&1 || return 0
+  tmux list-sessions >/dev/null 2>&1 || return 0
+  if ! tmux source-file "$HOME/.config/tmux/colors.conf" >/dev/null 2>&1; then
+    log "Could not reload tmux colors"
+    return 1
+  fi
+}
+
+reload_kitty() {
+  pgrep -x kitty >/dev/null 2>&1 || return 0
+  if command -v kitty >/dev/null 2>&1 \
+    && kitty @ set-colors --all --configured "$HOME/.config/kitty/kitty-colors.conf" >/dev/null 2>&1; then
+    return 0
+  fi
+  pkill -SIGUSR1 kitty 2>/dev/null
+}
+
+reload_nvim() {
+  pgrep -x nvim >/dev/null 2>&1 || return 0
+  pkill -SIGUSR1 nvim 2>/dev/null
+}
+
+reload_btop() {
+  pgrep -x btop >/dev/null 2>&1 || return 0
+  pkill -USR2 btop 2>/dev/null
+}
+
+apply_kde_scheme() {
+  local mode="$1" scheme selected_mode
+  command -v plasma-apply-colorscheme >/dev/null 2>&1 || return 0
+  scheme="Matugen${mode^}"
+
+  if [[ "$trigger" != manual ]]; then
+    selected_mode="$(current_mode)" || {
+      log "KDE color scheme changed; not applying $scheme"
+      return 1
+    }
+    if [[ "$selected_mode" != "$mode" ]]; then
+      log "KDE mode changed to $selected_mode; not applying $scheme"
+      return 1
+    fi
+  fi
+
+  if command -v kwriteconfig6 >/dev/null 2>&1; then
+    kwriteconfig6 --file kdeglobals --group General --key ColorScheme ""
+  fi
+  if ! plasma-apply-colorscheme "$scheme" >/dev/null 2>&1; then
+    command -v kwriteconfig6 >/dev/null 2>&1 \
+      && kwriteconfig6 --file kdeglobals --group General --key ColorScheme "$scheme"
+    log "Could not apply KDE color scheme: $scheme"
+    return 1
+  fi
+}
+
+mode=""
+trigger="manual"
+force=0
+for argument in "$@"; do
+  case "$argument" in
+    light|dark) mode="$argument" ;;
+    startup|wallpaper|scheme|manual) trigger="$argument" ;;
+    --force) force=1 ;;
+    *) usage; exit 2 ;;
+  esac
+done
+
+if [[ -z "$mode" ]]; then
+  mode="$(current_mode)" || {
+    log "Current KDE color scheme is not MatugenLight or MatugenDark; skipping"
+    exit 0
+  }
+fi
+
+if ! command -v matugen >/dev/null 2>&1; then
+  log "matugen is not installed (sudo pacman -S matugen)"
+  exit 1
+fi
+
+source="$(get_wallpaper_source 2>/dev/null)" || {
+  log "Could not resolve current Plasma wallpaper"
+  exit 1
+}
+
+case "$source" in
+  col:*)
+    input_id="$source"
+    matugen_source=(color hex "${source#col:}")
+    ;;
+  img:*)
+    local_image="$(resolve_image "$source")" || exit 1
+    input_id="$(sha256sum "$local_image" | cut -d' ' -f1)"
+    matugen_source=(image "$local_image")
+    ;;
+  *)
+    log "Unsupported wallpaper source: $source"
+    exit 1
+    ;;
+esac
+
+palette_current=0
+theme_current=0
+definition_id="$(sha256sum "$MATUGEN_CONFIG" "$HOME/.config/matugen/templates/"* | sha256sum | cut -d' ' -f1)"
+palette_key="$input_id:$definition_id"
+theme_key="$palette_key:$mode"
+[[ -f "$PALETTE_STATE" ]] && [[ "$(<"$PALETTE_STATE")" == "$palette_key" ]] && palette_current=1
+[[ -f "$THEME_STATE" ]] && [[ "$(<"$THEME_STATE")" == "$theme_key" ]] && theme_current=1
+
+required_outputs=(
+  "$HOME/.config/gtk-3.0/gtk.css"
+  "$HOME/.config/gtk-3.0/colors.css"
+  "$HOME/.config/gtk-4.0/gtk.css"
+  "$HOME/.config/gtk-4.0/colors.css"
+  "$HOME/.themes/Matugen/gnome-shell/gnome-shell.css"
+  "$HOME/.config/kitty/kitty-colors.conf"
+  "$HOME/.config/nvim/colors/matugen.vim"
+  "$HOME/.config/btop/themes/matugen.theme"
+  "$HOME/.config/cava/colors.ini"
+  "$HOME/.config/tmux/colors.conf"
+  "$HOME/.config/zellij/themes/matugen.kdl"
+  "$HOME/.config/matugen/themes/starship-colors.toml"
+  "$HOME/.config/yazi/colors.toml"
+  "$HOME/.config/matugen/themes/obsidian.css"
+  "$HOME/.config/matugen/themes/firefox-colors.css"
+  "$HOME/.config/qt5ct/colors/matugen.conf"
+  "$HOME/.config/qt6ct/colors/matugen.conf"
+  "$HOME/.local/share/color-schemes/MatugenLight.colors"
+  "$HOME/.local/share/color-schemes/MatugenDark.colors"
+)
+for output in "${required_outputs[@]}"; do
+  if [[ ! -f "$output" ]]; then
+    theme_current=0
+    [[ "$output" == *MatugenLight.colors || "$output" == *MatugenDark.colors ]] && palette_current=0
+  fi
+done
+kde_needs_refresh=$(( ! palette_current ))
+
+if (( ! force && palette_current && theme_current )); then
+  log "Wallpaper and $mode mode unchanged; skipping theme regeneration"
+  exit 0
+fi
+
+log "Generating $mode theme from: $source"
+attempt=0
+while true; do
+  attempt=$((attempt + 1))
+  if ! matugen -c "$MATUGEN_CONFIG" "${matugen_source[@]}" --mode "$mode" --prefer saturation; then
+    log "matugen failed"
+    exit 1
+  fi
+
+  [[ "$trigger" == manual ]] && break
+  selected_mode="$(current_mode)" || {
+    log "A non-Matugen KDE color scheme was selected; deferring global sync"
+    exit 0
+  }
+  [[ "$selected_mode" == "$mode" ]] && break
+  if (( attempt >= 3 )); then
+    log "KDE mode kept changing during generation; deferring global sync"
+    exit 1
+  fi
+  log "KDE mode changed to $selected_mode during generation; regenerating"
+  mode="$selected_mode"
+  theme_key="$palette_key:$mode"
+done
+
+for output in "${required_outputs[@]}"; do
+  if [[ ! -f "$output" ]]; then
+    log "Expected generated file is missing: $output"
+    exit 1
+  fi
+done
+
+sync_ok=1
+apply_gtk_mode "$mode" || sync_ok=0
+update_starship_palette || sync_ok=0
+reload_kitty || sync_ok=0
+reload_nvim || sync_ok=0
+reload_btop || sync_ok=0
+reload_tmux || sync_ok=0
+
+# A scheme-triggered run starts after System Settings has already selected it.
+# Wallpaper refreshes must force KDE to reload the regenerated file.
+if [[ "$trigger" != scheme ]] || (( kde_needs_refresh )); then
+  apply_kde_scheme "$mode" || sync_ok=0
+fi
+
+printf '%s\n' "$palette_key" > "$PALETTE_STATE"
+if (( sync_ok )); then
+  printf '%s\n' "$theme_key" > "$THEME_STATE"
+else
+  log "Theme generated, but one or more live synchronization steps failed"
+  exit 1
+fi
+log "Applied Matugen${mode^} globally"

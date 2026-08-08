@@ -1,0 +1,9 @@
+# Runtime and generated state
+.cache/
+*.tmp
+*.log
+
+# Editor state
+.idea/
+.vscode/
+*~

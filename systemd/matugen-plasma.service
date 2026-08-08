@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize Matugen themes with Plasma wallpaper and color scheme
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/matugen-plasma-watch
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
