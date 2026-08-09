@@ -72,5 +72,3 @@ KDE's Colors settings.
 - Zellij and some TUI applications may require a new session to load changes.
 - The slideshow resolver uses the first image path exposed by Plasma's config;
   third-party wallpaper plugins vary in how they persist their current image.
-
-The original design discussion is preserved in `docs/conversation.md`.
