@@ -20,9 +20,6 @@ applications.
 - `bin/`: apply and watch scripts.
 - `matugen/`: matugen configuration and source templates.
 - `systemd/`: systemd user service units.
-- `docs/conversation.md`: readable transcript of the planning session.
-- `docs/opencode-session.json`: complete OpenCode session export, including tool
-  calls and metadata.
 
 ## Behavior
 
