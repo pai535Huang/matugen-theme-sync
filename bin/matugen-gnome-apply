@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tmp_image=""
+cleanup() {
+  if [[ -n "$tmp_image" && -f "$tmp_image" ]]; then
+    rm -f "$tmp_image"
+  fi
+}
+trap cleanup EXIT
+
+strip_gvariant_quotes() {
+  local value="$1"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s\n' "$value"
+}
+
+decode_file_uri() {
+  local uri="$1"
+  local path="${uri#file://}"
+  printf '%b' "${path//%/\\x}"
+}
+
+current_color_scheme() {
+  strip_gvariant_quotes "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || printf "'default'")"
+}
+
+read_wallpaper_uri() {
+  local key="$1"
+  strip_gvariant_quotes "$(gsettings get org.gnome.desktop.background "$key" 2>/dev/null || true)"
+}
+
+pick_wallpaper() {
+  local key scheme uri path fallback
+  local -a keys
+
+  scheme="$(current_color_scheme)"
+  if [[ "$scheme" == "prefer-dark" ]]; then
+    keys=(picture-uri-dark picture-uri)
+  else
+    keys=(picture-uri picture-uri-dark)
+  fi
+
+  for key in "${keys[@]}"; do
+    uri="$(read_wallpaper_uri "$key")"
+    if [[ "$uri" == file://* ]]; then
+      path="$(decode_file_uri "$uri")"
+      if [[ -f "$path" ]]; then
+        printf '%s\n' "$path"
+        return 0
+      fi
+    fi
+  done
+
+  fallback="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" -maxdepth 2 -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.jxl' \) \
+    2>/dev/null | sort | head -n 1)"
+
+  if [[ -n "$fallback" ]]; then
+    printf '%s\n' "$fallback"
+    return 0
+  fi
+
+  return 1
+}
+
+prepare_image() {
+  local image="$1"
+
+  case "${image,,}" in
+    *.jpg|*.jpeg|*.png|*.webp)
+      printf '%s\n' "$image"
+      return 0
+      ;;
+  esac
+
+  tmp_image="$(mktemp --suffix=.png /tmp/matugen-wallpaper.XXXXXX)"
+  if command -v magick >/dev/null 2>&1; then
+    magick "$image" "$tmp_image"
+  elif command -v convert >/dev/null 2>&1; then
+    convert "$image" "$tmp_image"
+  else
+    printf 'Unsupported image format and ImageMagick is not installed: %s\n' "$image" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$tmp_image"
+}
+
+update_starship_palette() {
+  local generated="$HOME/.config/matugen/themes/starship-colors.toml"
+  local config="$HOME/.config/starship.toml"
+
+  if [[ ! -f "$generated" || ! -f "$config" ]]; then
+    return 0
+  fi
+
+  local palette_block
+  palette_block="$(awk '
+    /^\[palettes\.[^]]+\]/ { in_pal = 1; print; next }
+    in_pal && /^\[/ { exit }
+    in_pal && /^color[0-9]/ { print }
+  ' "$generated")"
+
+  if [[ -z "$palette_block" ]]; then
+    return 0
+  fi
+
+  awk -v new="$palette_block" '
+    BEGIN { in_block = 0; in_pal = 0 }
+    /^# BEGIN MATUGEN PALETTE$/ { in_block = 1; print; next }
+    /^# END MATUGEN PALETTE$/ { in_block = 0; print; next }
+    in_block && /^\[palettes\.[^]]+\]$/ {
+      in_pal = 1
+      print new
+      next
+    }
+    in_block && in_pal && /^\[/ { in_pal = 0 }
+    in_block && in_pal { next }
+    { print }
+  ' "$config" > "$config.tmp"
+
+  mv "$config.tmp" "$config"
+}
+
+set_gnome_accent_color() {
+  local colors_file="$HOME/.config/gtk-4.0/colors.css"
+  local accent best
+
+  if ! gsettings range org.gnome.desktop.interface accent-color >/dev/null 2>&1; then
+    return 0
+  fi
+
+  accent="$(awk '/@define-color accent_bg_color/ { gsub(";", "", $3); print $3; exit }' "$colors_file" 2>/dev/null || true)"
+  if [[ ! "$accent" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+    return 0
+  fi
+
+  best="$(awk -v accent="$accent" '
+    function abs(n) { return n < 0 ? -n : n }
+    function hex2dec(s) { return strtonum("0x" s) }
+    function hsv(hex, out,    r,g,b,max,min,delta) {
+      r = hex2dec(substr(hex, 2, 2)) / 255
+      g = hex2dec(substr(hex, 4, 2)) / 255
+      b = hex2dec(substr(hex, 6, 2)) / 255
+      max = r; if (g > max) max = g; if (b > max) max = b
+      min = r; if (g < min) min = g; if (b < min) min = b
+      delta = max - min
+      out[2] = max == 0 ? 0 : delta / max
+      out[3] = max
+      if (delta == 0) {
+        out[1] = 0
+      } else if (max == r) {
+        out[1] = 60 * ((g - b) / delta)
+        if (out[1] < 0) out[1] += 360
+      } else if (max == g) {
+        out[1] = 60 * ((b - r) / delta + 2)
+      } else {
+        out[1] = 60 * ((r - g) / delta + 4)
+      }
+    }
+    BEGIN {
+      colors["blue"] = "#3584e4"
+      colors["teal"] = "#2190a4"
+      colors["green"] = "#3a944a"
+      colors["yellow"] = "#c88800"
+      colors["orange"] = "#ed5b00"
+      colors["red"] = "#e62d42"
+      colors["pink"] = "#d56199"
+      colors["purple"] = "#9141ac"
+      colors["slate"] = "#6f8396"
+
+      hsv(accent, target)
+      if (target[2] < 0.18) {
+        print "slate"
+        exit
+      }
+
+      best = "blue"
+      best_score = 999999
+      for (name in colors) {
+        hsv(colors[name], candidate)
+        hue_dist = abs(target[1] - candidate[1])
+        if (hue_dist > 180) hue_dist = 360 - hue_dist
+        score = hue_dist * 3 + abs(target[2] - candidate[2]) * 100 + abs(target[3] - candidate[3]) * 20
+        if (score < best_score) {
+          best_score = score
+          best = name
+        }
+      }
+      print best
+    }
+  ' 2>/dev/null)"
+
+  if [[ -n "$best" ]]; then
+    set_gsetting org.gnome.desktop.interface accent-color "$best" || true
+  fi
+}
+
+if ! command -v matugen >/dev/null 2>&1; then
+  printf '%s\n' 'matugen is not installed. Install it with: sudo pacman -S matugen' >&2
+  exit 1
+fi
+
+set_gsetting() {
+  if ! gsettings set "$@" >/dev/null 2>&1; then
+    dbus-run-session -- gsettings set "$@"
+  fi
+}
+
+image="${1:-}"
+if [[ -z "$image" ]]; then
+  image="$(pick_wallpaper)" || {
+    printf '%s\n' "No usable wallpaper found. Pass an image path explicitly." >&2
+    exit 1
+  }
+fi
+
+if [[ ! -f "$image" ]]; then
+  printf 'Image not found: %s\n' "$image" >&2
+  exit 1
+fi
+
+source_image="$image"
+image="$(prepare_image "$image")"
+
+# Follow GNOME's official light/dark setting (org.gnome.desktop.interface
+# color-scheme): prefer-dark -> dark generation, otherwise light.
+scheme="$(current_color_scheme)"
+if [[ "$scheme" == "prefer-dark" ]]; then
+  matugen_mode="dark"
+  gtk_theme="adw-gtk3-dark"
+else
+  matugen_mode="light"
+  gtk_theme="adw-gtk3"
+fi
+
+set_gsetting org.gnome.desktop.interface gtk-theme "$gtk_theme"
+set_gsetting org.gnome.desktop.interface icon-theme 'Adwaita'
+set_gsetting org.gnome.desktop.interface cursor-theme 'Adwaita'
+
+matugen image "$image" --mode "$matugen_mode" --prefer saturation
+update_starship_palette
+set_gnome_accent_color
+
+if command -v gnome-extensions >/dev/null 2>&1; then
+  gnome-extensions enable user-theme@gnome-shell-extensions.gcampax.github.com >/dev/null 2>&1 || true
+fi
+
+if gsettings list-schemas | grep -qx 'org.gnome.shell.extensions.user-theme'; then
+  set_gsetting org.gnome.shell.extensions.user-theme name 'default' || true
+  sleep 1
+  set_gsetting org.gnome.shell.extensions.user-theme name 'Matugen' || true
+fi
+
+printf 'Applied matugen theme from: %s\n' "$source_image"
+printf '%s\n' "Restart GTK apps to pick up generated CSS."

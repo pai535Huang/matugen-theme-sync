@@ -7,3 +7,6 @@
 .idea/
 .vscode/
 *~
+
+# AI session exports (kept local only)
+docs/

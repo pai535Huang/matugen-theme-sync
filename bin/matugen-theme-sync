@@ -1,0 +1,682 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""matugen-theme-sync: deploy or remove the Matugen theming pipeline for the
+current desktop environment (KDE Plasma or GNOME).
+
+Commands:
+  matugen-theme-sync apply      deploy scripts, matugen config and systemd service
+  matugen-theme-sync uninstall  remove scripts and the systemd service
+  matugen-theme-sync status     show the desktop environment and install state
+  matugen-theme-sync show-ui    open the GTK4 / libadwaita GUI
+
+The desktop environment is detected automatically. The GUI buttons simply run
+the matching CLI command under the hood.
+"""
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+APP_NAME = "matugen-theme-sync"
+
+HOME = Path.home()
+LOCAL_BIN = HOME / ".local" / "bin"
+MATUGEN_CONFIG_DIR = HOME / ".config" / "matugen"
+SYSTEMD_USER_DIR = HOME / ".config" / "systemd" / "user"
+STATE_DIR = HOME / ".cache" / "matugen-plasma"
+
+DE_PLASMA = "plasma"
+DE_GNOME = "gnome"
+
+DE_INFO = {
+    DE_PLASMA: {
+        "name": "KDE Plasma",
+        "service": "matugen-plasma.service",
+        "scripts": ("matugen-plasma-apply", "matugen-plasma-watch"),
+        "config": "config-plasma.toml",
+    },
+    DE_GNOME: {
+        "name": "GNOME",
+        "service": "matugen-gnome.service",
+        "scripts": ("matugen-gnome-apply", "matugen-gnome-watch"),
+        "config": "config-gnome.toml",
+    },
+}
+
+
+def script_path() -> Path:
+    return Path(os.path.realpath(__file__)).resolve()
+
+
+def resource_root() -> Path:
+    """Return the directory that holds bin/, matugen/ and systemd/.
+
+    Candidates, in order:
+      1. the repository / ~/.local install layout (script lives in bin/),
+      2. a system-wide install under /usr/share.
+    """
+    candidates = [
+        script_path().parent.parent,
+        Path("/usr/share/matugen-theme-sync"),
+    ]
+    for root in candidates:
+        if (root / "matugen" / "config-plasma.toml").exists():
+            return root
+    return candidates[0]
+
+
+BIN_DIR = resource_root() / "bin"
+MATUGEN_DIR = resource_root() / "matugen"
+TEMPLATES_DIR = MATUGEN_DIR / "templates"
+SYSTEMD_DIR = resource_root() / "systemd"
+
+# ---------------------------------------------------------------------------
+# Terminal output helpers
+# ---------------------------------------------------------------------------
+
+GREEN = "\033[32m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+
+def _color(text, color):
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        return f"{color}{text}{RESET}"
+    return text
+
+
+def info(msg):
+    print(f"[{APP_NAME}] {msg}", flush=True)
+
+
+def step(msg):
+    print(_color(f"[{APP_NAME}] \u25b8 {msg}", BOLD), flush=True)
+
+
+def ok(msg):
+    print(_color(f"[{APP_NAME}] OK: {msg}", GREEN), flush=True)
+
+
+def warn(msg):
+    print(_color(f"[{APP_NAME}] WARN: {msg}", YELLOW), flush=True)
+
+
+def error(msg):
+    print(_color(f"[{APP_NAME}] ERROR: {msg}", RED), flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Desktop environment detection
+# ---------------------------------------------------------------------------
+
+
+def detect_session_type():
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type in ("wayland", "x11", "tty"):
+        return session_type
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return "wayland"
+    if os.environ.get("DISPLAY"):
+        return "x11"
+    return "unknown"
+
+
+def detect_desktop():
+    hints = " ".join(
+        filter(
+            None,
+            (
+                os.environ.get("XDG_CURRENT_DESKTOP", ""),
+                os.environ.get("DESKTOP_SESSION", ""),
+                os.environ.get("GDMSESSION", ""),
+            ),
+        )
+    ).lower()
+
+    if "plasma" in hints or "kde" in hints:
+        return DE_PLASMA
+    if "gnome" in hints or "ubuntu:gnome" in hints:
+        return DE_GNOME
+
+    has_session = bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))
+    if not has_session:
+        return None
+    if shutil.which("plasma-apply-colorscheme"):
+        return DE_PLASMA
+    if shutil.which("gnome-shell"):
+        return DE_GNOME
+    return None
+
+
+def kde_current_mode():
+    scheme = ""
+    kreadconfig = shutil.which("kreadconfig6")
+    if kreadconfig:
+        res = subprocess.run(
+            [kreadconfig, "--file", "kdeglobals", "--group", "General",
+             "--key", "ColorScheme"],
+            capture_output=True, text=True,
+        )
+        scheme = res.stdout.strip()
+    else:
+        try:
+            import configparser
+
+            config = configparser.ConfigParser(interpolation=None, strict=False)
+            config.optionxform = str
+            config.read(HOME / ".config" / "kdeglobals")
+            scheme = config.get("General", "ColorScheme", fallback="")
+        except Exception:
+            scheme = ""
+    if scheme == "MatugenLight":
+        return "light"
+    if scheme == "MatugenDark":
+        return "dark"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
+
+
+def run(cmd):
+    try:
+        return subprocess.run(cmd, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        return None
+
+
+def stream(cmd):
+    """Run cmd, streaming merged output line by line. Returns the exit code."""
+    try:
+        proc = subprocess.Popen(cmd, text=True, bufsize=1,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except FileNotFoundError:
+        error(f"命令未找到: {cmd[0]}")
+        return 1
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+    return proc.wait()
+
+
+def install_file(src, dst, mode=0o644):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    os.chmod(dst, mode)
+
+
+def check_dependencies(de):
+    missing = []
+    if not shutil.which("matugen"):
+        missing.append("matugen")
+    if de == DE_PLASMA:
+        for tool in ("kreadconfig6", "kwriteconfig6", "plasma-apply-colorscheme"):
+            if not shutil.which(tool):
+                missing.append(tool)
+    elif not shutil.which("gsettings"):
+        missing.append("gsettings")
+    if missing:
+        warn("缺少依赖: " + ", ".join(missing))
+    return not missing
+
+
+# ---------------------------------------------------------------------------
+# apply / uninstall / status
+# ---------------------------------------------------------------------------
+
+
+def bootstrap_command(de):
+    if de == DE_PLASMA:
+        mode = kde_current_mode() or "dark"
+        return [str(LOCAL_BIN / "matugen-plasma-apply"), mode, "manual", "--force"]
+    return [str(LOCAL_BIN / "matugen-gnome-apply")]
+
+
+def cmd_apply(force_de=None, bootstrap=True):
+    de = force_de or detect_desktop()
+    if not de:
+        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma 和 GNOME)。")
+        return 1
+
+    info_de = DE_INFO[de]
+    name = info_de["name"]
+    session = detect_session_type()
+
+    print()
+    step(f"桌面环境: {name} ({session})")
+    step("部署脚本到 ~/.local/bin, 写入 ~/.config/matugen 配置, 注册 systemd 用户服务")
+    print()
+
+    for script in info_de["scripts"]:
+        src = BIN_DIR / script
+        dst = LOCAL_BIN / script
+        if not src.exists():
+            error(f"缺少源文件: {src}")
+            return 1
+        install_file(src, dst, 0o755)
+        ok(f"脚本: {dst}")
+
+    cli_src = script_path()
+    cli_dst = LOCAL_BIN / APP_NAME
+    if cli_dst.is_symlink() or cli_dst.exists():
+        cli_dst.unlink()
+    try:
+        os.symlink(cli_src, cli_dst)
+        ok(f"命令行链接: {cli_dst} \u2192 {cli_src}")
+    except OSError as exc:
+        warn(f"无法创建命令行链接 ({exc}); 请手动将 {cli_src} 放入 PATH")
+    if not any(p == str(LOCAL_BIN) for p in os.environ.get("PATH", "").split(":")):
+        warn(f"{LOCAL_BIN} 不在 PATH 中; 可添加 export PATH=\"$HOME/.local/bin:$PATH\"")
+
+    config_src = MATUGEN_DIR / info_de["config"]
+    install_file(config_src, MATUGEN_CONFIG_DIR / "config.toml")
+    ok(f"matugen 配置: ~/.config/matugen/config.toml (来自 {info_de['config']})")
+
+    count = 0
+    for template in sorted(TEMPLATES_DIR.iterdir()):
+        if template.is_file():
+            install_file(template, MATUGEN_CONFIG_DIR / "templates" / template.name)
+            count += 1
+    ok(f"matugen 模板: {count} 个文件 \u2192 ~/.config/matugen/templates/")
+
+    service_dst = SYSTEMD_USER_DIR / info_de["service"]
+    install_file(SYSTEMD_DIR / info_de["service"], service_dst)
+    ok(f"systemd 服务: {service_dst}")
+
+    systemctl = shutil.which("systemctl")
+    if not systemctl:
+        warn("未找到 systemctl; 请稍后手动执行 systemctl --user enable "
+             f"{info_de['service']}")
+    else:
+        if run([systemctl, "--user", "daemon-reload"]).returncode != 0:
+            error("systemctl --user daemon-reload 失败")
+            return 1
+        res = run([systemctl, "--user", "enable", "--now", info_de["service"]])
+        if res is None or res.returncode != 0:
+            error(f"启用并启动服务失败: "
+                  f"{(res.stderr.strip() if res else 'systemctl 不可用')}")
+            return 1
+        ok(f"服务已启用并启动: {info_de['service']}")
+
+    check_dependencies(de)
+
+    if bootstrap:
+        if not shutil.which("matugen"):
+            warn("未检测到 matugen, 跳过首次主题生成 (安装: sudo pacman -S matugen)")
+        else:
+            step(f"正在为 {name} 生成主题\u2026")
+            rc = stream(bootstrap_command(de))
+            if rc != 0:
+                error("首次主题生成失败, 但脚本与服务已安装完成")
+                return 1
+            ok("首次主题已生成")
+
+    print()
+    ok(f"应用完成 \u2014 {name} 已启用 Matugen 主题同步")
+    print(f"  \u2022 查看状态:  {APP_NAME} status")
+    print(f"  \u2022 图形界面:  {APP_NAME} show-ui")
+    return 0
+
+
+def cmd_uninstall(force_de=None, purge=False):
+    de = force_de or detect_desktop()
+    if not de:
+        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma 和 GNOME)。")
+        return 1
+
+    info_de = DE_INFO[de]
+    name = info_de["name"]
+    session = detect_session_type()
+
+    print()
+    step(f"桌面环境: {name} ({session})")
+    step(f"正在卸载 {name} 的 Matugen 主题同步\u2026")
+    print()
+
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        run([systemctl, "--user", "disable", "--now", info_de["service"]])
+        ok(f"已停止并禁用服务: {info_de['service']}")
+
+    service_file = SYSTEMD_USER_DIR / info_de["service"]
+    if service_file.exists():
+        service_file.unlink()
+        ok(f"已删除服务文件: {service_file}")
+        if systemctl:
+            run([systemctl, "--user", "daemon-reload"])
+    else:
+        warn(f"服务文件不存在: {service_file}")
+
+    for script in info_de["scripts"]:
+        target = LOCAL_BIN / script
+        if target.exists():
+            target.unlink()
+            ok(f"已删除脚本: {target}")
+
+    cli = LOCAL_BIN / APP_NAME
+    if cli.is_symlink():
+        try:
+            points_here = os.path.realpath(cli) == os.path.realpath(__file__)
+        except OSError:
+            points_here = False
+        if points_here:
+            cli.unlink()
+            ok(f"已删除命令行链接: {cli}")
+    elif cli.exists():
+        warn(f"~/.local/bin/{APP_NAME} 不是指向本项目的链接, 已保留")
+
+    if purge:
+        shutil.rmtree(MATUGEN_CONFIG_DIR, ignore_errors=True)
+        shutil.rmtree(STATE_DIR, ignore_errors=True)
+        ok("已删除 ~/.config/matugen 配置与缓存状态 (--purge)")
+
+    print()
+    ok(f"卸载完成 \u2014 {name} 的 Matugen 主题同步已移除")
+    if not purge:
+        warn("保留 ~/.config/matugen 配置与模板; 如需一并删除请使用 --purge")
+    return 0
+
+
+def cmd_status():
+    de = detect_desktop()
+    session = detect_session_type()
+
+    print()
+    if de:
+        ok(f"桌面环境: {DE_INFO[de]['name']} ({session})")
+    else:
+        warn(f"桌面环境: 未知 ({session}) \u2014 仅支持 KDE Plasma 与 GNOME")
+    print()
+
+    systemctl = shutil.which("systemctl")
+    units = [DE_INFO[DE_PLASMA], DE_INFO[DE_GNOME]] if not de else [DE_INFO[de]]
+
+    for info_de in units:
+        print(f"{info_de['name']} 安装状态:")
+        service_file = SYSTEMD_USER_DIR / info_de["service"]
+        if not service_file.exists():
+            state = "未安装"
+        else:
+            state = "已安装"
+            if systemctl:
+                enabled = run([systemctl, "--user", "is-enabled", info_de["service"]])
+                active = run([systemctl, "--user", "is-active", info_de["service"]])
+                enabled_state = enabled.stdout.strip() if enabled else "?"
+                active_state = active.stdout.strip() if active else "?"
+                state += f", 启用: {enabled_state}, 运行: {active_state}"
+        print(f"  服务:   {info_de['service']} \u2014 {state}")
+
+        scripts = []
+        for script in info_de["scripts"]:
+            mark = "\u2713" if (LOCAL_BIN / script).exists() else "\u2717"
+            scripts.append(f"{mark} {script}")
+        print(f"  脚本:   {', '.join(scripts)}")
+
+        cli = LOCAL_BIN / APP_NAME
+        mark = "\u2713" if (cli.exists() or cli.is_symlink()) else "\u2717"
+        print(f"  命令行: {mark} {APP_NAME}")
+
+        mark = "\u2713" if (MATUGEN_CONFIG_DIR / "config.toml").exists() else "\u2717"
+        print(f"  配置:   {mark} ~/.config/matugen/config.toml")
+        print()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# GUI (GTK4 / libadwaita)
+# ---------------------------------------------------------------------------
+
+
+def _adw_imports():
+    import gi
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, GLib, Gtk
+
+    return Adw, GLib, Gtk
+
+
+class SyncApp:
+    """GTK4 / libadwaita window. Buttons run the matching CLI subcommand."""
+
+    def __init__(self, application, Adw, GLib, Gtk):
+        self.app = application
+        self.Adw = Adw
+        self.GLib = GLib
+        self.Gtk = Gtk
+        self._proc = None
+
+        de = detect_desktop()
+        session = detect_session_type()
+        self._supported = de is not None
+        de_name = f"{DE_INFO[de]['name']} ({session})" if de else "未知 / 不受支持"
+
+        self._build_window(de_name)
+        self._append(f"matugen-theme-sync \u2014 当前桌面环境: {de_name}")
+        self._append("点击「应用」部署脚本并注册 systemd 服务; "
+                     "点击「卸载」移除它们。输出显示在下方。")
+
+    def present(self):
+        self.window.present()
+
+    def _build_window(self, de_name):
+        Gtk = self.Gtk
+        Adw = self.Adw
+
+        win = Adw.ApplicationWindow(application=self.app)
+        win.set_title("Matugen Theme Sync")
+        win.set_default_size(760, 560)
+
+        toolbar = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        header.set_title_widget(
+            Adw.WindowTitle(title="Matugen Theme Sync",
+                            subtitle="KDE Plasma / GNOME 主题同步")
+        )
+        toolbar.add_top_bar(header)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(12)
+        content.set_margin_bottom(12)
+        content.set_margin_start(12)
+        content.set_margin_end(12)
+
+        de_list = Gtk.ListBox()
+        de_list.add_css_class("boxed-list")
+        de_row = Adw.ActionRow(title="当前桌面环境")
+        de_row.set_subtitle(de_name)
+        de_row.add_prefix(Gtk.Image(icon_name="preferences-desktop-theme-symbolic"))
+        if not self._supported:
+            de_row.add_suffix(Gtk.Image(icon_name="dialog-warning-symbolic"))
+        de_list.append(de_row)
+        content.append(de_list)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.apply_btn = Gtk.Button(label="应用",
+                                    icon_name="view-refresh-symbolic")
+        self.apply_btn.add_css_class("suggested-action")
+        self.apply_btn.set_hexpand(True)
+        self.apply_btn.connect("clicked", self._on_apply)
+
+        self.uninstall_btn = Gtk.Button(label="卸载",
+                                        icon_name="edit-delete-symbolic")
+        self.uninstall_btn.add_css_class("destructive-action")
+        self.uninstall_btn.set_hexpand(True)
+        self.uninstall_btn.connect("clicked", self._on_uninstall)
+
+        btn_box.append(self.apply_btn)
+        btn_box.append(self.uninstall_btn)
+        if not self._supported:
+            self.apply_btn.set_sensitive(False)
+            self.uninstall_btn.set_sensitive(False)
+        content.append(btn_box)
+
+        self.buffer = Gtk.TextBuffer()
+        self.textview = Gtk.TextView(buffer=self.buffer)
+        self.textview.set_editable(False)
+        self.textview.set_monospace(True)
+        self.textview.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.textview.set_cursor_visible(False)
+        self.textview.set_left_margin(8)
+        self.textview.set_right_margin(8)
+        self.textview.set_top_margin(6)
+        self.textview.set_bottom_margin(6)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_child(self.textview)
+        content.append(scroll)
+
+        self.status_label = Gtk.Label(label="就绪", xalign=0.0)
+        content.append(self.status_label)
+
+        toolbar.set_content(content)
+        win.set_content(toolbar)
+        win.connect("close-request", self._on_close)
+        self.window = win
+
+    def _append(self, text):
+        self.buffer.insert(self.buffer.get_end_iter(), text + "\n")
+        self.textview.scroll_to_iter(self.buffer.get_end_iter(), 0.0,
+                                     False, 0.0, 0.0)
+
+    def _set_running(self, running):
+        self.apply_btn.set_sensitive(not running)
+        self.uninstall_btn.set_sensitive(not running)
+        self.status_label.set_label("运行中\u2026" if running else "就绪")
+
+    def _on_apply(self, _button):
+        self._start_task(["apply"])
+
+    def _on_uninstall(self, _button):
+        dialog = self.Adw.MessageDialog(transient_for=self.window)
+        dialog.set_heading("确认卸载")
+        dialog.set_body("将删除主题同步脚本并移除 systemd 服务。\n"
+                        "(保留 ~/.config/matugen 配置与模板)")
+        dialog.add_response("cancel", "取消")
+        dialog.add_response("uninstall", "卸载")
+        dialog.set_response_appearance("uninstall",
+                                       self.Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.connect("response", self._on_uninstall_confirmed)
+        dialog.present()
+
+    def _on_uninstall_confirmed(self, dialog, response):
+        if response == "uninstall":
+            self._start_task(["uninstall"])
+
+    def _start_task(self, args):
+        if self._proc is not None:
+            return
+        self._set_running(True)
+        self.buffer.set_text("")
+        self._append(f"$ {APP_NAME} {' '.join(args)}")
+
+        cmd = [sys.executable, str(script_path())] + args
+        try:
+            self._proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1,
+            )
+        except OSError as exc:
+            self._append(f"ERROR: {exc}")
+            self._set_running(False)
+            self.status_label.set_label("启动失败")
+            return
+
+        import threading
+
+        threading.Thread(target=self._reader, args=(self._proc,),
+                         daemon=True).start()
+
+    def _reader(self, proc):
+        for line in proc.stdout:
+            self.GLib.idle_add(self._append, line.rstrip())
+        returncode = proc.wait()
+        self.GLib.idle_add(self._finish, returncode)
+
+    def _finish(self, returncode):
+        self._proc = None
+        self._set_running(False)
+        if returncode == 0:
+            self.status_label.set_label("完成 \u2713")
+        else:
+            self.status_label.set_label(f"失败 (退出码 {returncode})")
+
+    def _on_close(self, *_args):
+        if self._proc is not None:
+            self._proc.terminate()
+        return False
+
+
+def cmd_show_ui():
+    try:
+        Adw, GLib, Gtk = _adw_imports()
+    except Exception:
+        error("无法启动 GUI: 缺少 GTK4 / libadwaita 的 Python 绑定。")
+        error("请安装 python-gobject gtk4 libadwaita (例如: sudo pacman -S python-gobject gtk4 libadwaita)")
+        return 1
+
+    class App(Adw.Application):
+        def do_activate(self):
+            if not hasattr(self, "_sync"):
+                self._sync = SyncApp(self, Adw, GLib, Gtk)
+            self._sync.present()
+
+    app = App(application_id="io.github.pai535h.matugen-theme-sync")
+    return app.run(None)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog=APP_NAME,
+        description="为当前桌面环境 (KDE Plasma / GNOME) 部署或移除 Matugen 主题同步",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    p_apply = sub.add_parser("apply", help="部署脚本、matugen 配置并注册 systemd 服务")
+    p_apply.add_argument("--de", choices=[DE_PLASMA, DE_GNOME],
+                         help="强制指定桌面环境 (默认自动检测)")
+    p_apply.add_argument("--no-bootstrap", action="store_true",
+                         help="安装后不立即生成主题")
+
+    p_uninstall = sub.add_parser("uninstall", help="删除脚本并移除 systemd 服务")
+    p_uninstall.add_argument("--de", choices=[DE_PLASMA, DE_GNOME],
+                             help="强制指定桌面环境 (默认自动检测)")
+    p_uninstall.add_argument("--purge", action="store_true",
+                             help="同时删除 ~/.config/matugen 配置")
+
+    sub.add_parser("status", help="显示当前桌面环境与安装状态")
+    sub.add_parser("show-ui", help="打开 GTK4 / libadwaita 图形界面")
+
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 2
+
+    if args.command == "apply":
+        return cmd_apply(force_de=args.de, bootstrap=not args.no_bootstrap)
+    if args.command == "uninstall":
+        return cmd_uninstall(force_de=args.de, purge=args.purge)
+    if args.command == "status":
+        return cmd_status()
+    if args.command == "show-ui":
+        return cmd_show_ui()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
