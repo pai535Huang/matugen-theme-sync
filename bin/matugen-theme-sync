@@ -360,18 +360,6 @@ def cmd_uninstall(force_de=None, purge=False):
             target.unlink()
             ok(f"已删除脚本: {target}")
 
-    cli = LOCAL_BIN / APP_NAME
-    if cli.is_symlink():
-        try:
-            points_here = os.path.realpath(cli) == os.path.realpath(__file__)
-        except OSError:
-            points_here = False
-        if points_here:
-            cli.unlink()
-            ok(f"已删除命令行链接: {cli}")
-    elif cli.exists():
-        warn(f"~/.local/bin/{APP_NAME} 不是指向本项目的链接, 已保留")
-
     if purge:
         shutil.rmtree(MATUGEN_CONFIG_DIR, ignore_errors=True)
         shutil.rmtree(STATE_DIR, ignore_errors=True)
@@ -381,6 +369,7 @@ def cmd_uninstall(force_de=None, purge=False):
     ok(f"卸载完成 \u2014 {name} 的 Matugen 主题同步已移除")
     if not purge:
         warn("保留 ~/.config/matugen 配置与模板; 如需一并删除请使用 --purge")
+    info(f"命令行工具 {APP_NAME} 已保留; 如需连工具一起删除请用 install.sh uninstall")
     return 0
 
 
@@ -560,7 +549,7 @@ class SyncApp:
         dialog = self.Adw.MessageDialog(transient_for=self.window)
         dialog.set_heading("确认卸载")
         dialog.set_body("将删除主题同步脚本并移除 systemd 服务。\n"
-                        "(保留 ~/.config/matugen 配置与模板)")
+                        "(保留 ~/.config/matugen 配置与命令行工具)")
         dialog.add_response("cancel", "取消")
         dialog.add_response("uninstall", "卸载")
         dialog.set_response_appearance("uninstall",
