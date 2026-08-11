@@ -1,143 +1,60 @@
 # Matugen Theme Sync
 
-This project generates wallpaper-derived light and dark themes and keeps them
-synchronized across your desktop environment. It supports **KDE Plasma** and
-**GNOME** in a single project: the desktop environment is detected
-automatically and the matching matugen configuration, helper scripts, and
-systemd user service are deployed.
+Generate wallpaper-derived light/dark themes with [matugen](https://github.com/InioX/matugen) and keep them synchronized across your desktop. Auto-detects **KDE Plasma** or **GNOME** and deploys the matching config, helper scripts, and systemd user service with one command — or one GUI click.
 
-## Goal
+## Features
 
-- One command and one GUI to install or remove the whole theming pipeline for
-  the desktop you are currently running.
-- KDE Plasma: wallpaper and the selected `MatugenLight` / `MatugenDark` KDE
-  color scheme drive global light/dark synchronization.
-- GNOME: wallpaper changes (via gsettings) regenerate the theme, and the
-  official light/dark setting (`org.gnome.desktop.interface color-scheme`)
-  switches matugen between light and dark generation; GTK, GNOME Shell and all
-  integrated apps are refreshed.
-- The active mode also controls GTK 3/4, GNOME color preference, Kitty, Neovim,
-  btop, tmux, Zellij, Cava, Starship, Yazi, and qt5ct/qt6ct palettes.
-- **wal / pywalfox**: matugen also writes a pywal-compatible color scheme to
-  `~/.cache/wal/colors.json` (official `pywalfox` theme), so software that
-  reads wal colors (pywal, pywalfox, pywal-based dotfiles, …) follows the
-  matugen theme automatically.
+- One command / GUI to install, apply, or remove the whole theming pipeline for your current desktop
+- KDE Plasma: wallpaper + selected `MatugenLight`/`MatugenDark` color scheme drive global light/dark sync
+- GNOME: follows `org.gnome.desktop.interface color-scheme`; GTK, GNOME Shell, and apps refresh on change
+- Themes GTK 3/4, GNOME color preference, Kitty, Neovim, btop, tmux, Zellij, Cava, Starship, Yazi, qt5ct/qt6ct
+- Writes a pywal-compatible scheme to `~/.cache/wal/colors.json` so pywal/pywalfox software follows along
 
-## Layout
+## Requirements
 
-- `bin/matugen-theme-sync`: the CLI + GTK4/libadwaita GUI program.
-- `bin/matugen-plasma-apply`, `bin/matugen-plasma-watch`: KDE Plasma helpers.
-- `bin/matugen-gnome-apply`, `bin/matugen-gnome-watch`: GNOME helpers (from
-  the `gnome-dotfiles` repo).
-- `matugen/config-plasma.toml`, `matugen/config-gnome.toml`: matugen
-  configurations, selected by the detected desktop environment.
-- `matugen/templates/`: source templates shared by both configurations
-  (including `pywalfox-colors.json` for the wal/pywalfox output).
-- `systemd/`: systemd user service units for each desktop environment.
-- `install.sh`: one-click installer / uninstaller.
-
-## Usage
-
-The program detects the desktop environment automatically from your session
-(`XDG_CURRENT_DESKTOP` etc.) and displays it.
-
-## Installation
-
-### One-click installer (recommended)
-
-Works from the repository or straight from GitHub, no root required:
+- `matugen`, `python3`, `flock`, `curl`
+- KDE Plasma: `kreadconfig6`, `kwriteconfig6`, `plasma-apply-colorscheme`, `inotify-tools`
+- GNOME: `gsettings`
+- GUI: `python-gobject`, `gtk4`, `libadwaita`
 
 ```bash
-# from a checkout of this repository:
+sudo pacman -S matugen python-gobject gtk4 libadwaita glib2 inotify-tools
+```
+
+## Install
+
+```bash
+# from a checkout:
 ./install.sh
 
-# or directly from GitHub:
+# or straight from GitHub:
 curl -fsSL https://raw.githubusercontent.com/pai535Huang/matugen-theme-sync/main/install.sh | sh
 ```
 
-The installer copies the program into `~/.local/share/matugen-theme-sync/`,
-links the `matugen-theme-sync` command into `~/.local/bin/`, and adds a
-"Matugen Theme Sync" entry to your application menu. It checks the
-dependencies (matugen, python-gobject, gtk4, libadwaita) and asks whether to
-run `apply` right away.
+Installs to `~/.local/share/matugen-theme-sync/`, links the `matugen-theme-sync` command into `~/.local/bin/`, and adds an app-menu entry.
 
-Remove everything it installed with:
+Uninstall everything with:
 
 ```bash
 ~/.local/share/matugen-theme-sync/install.sh uninstall
 ```
 
-### Run from the repository
+## Usage
+
+The desktop environment is detected automatically from your session.
 
 ```bash
-bin/matugen-theme-sync status
-bin/matugen-theme-sync show-ui
+matugen-theme-sync status      # show detected desktop + install state
+matugen-theme-sync apply       # deploy config, scripts, and service; generate the theme
+matugen-theme-sync uninstall   # stop the service and remove what apply deployed
+matugen-theme-sync show-ui     # open the libadwaita GUI
 ```
 
-After the first `apply`, `~/.local/bin/matugen-theme-sync` points at this
-program, so the bare command works everywhere on your PATH.
+Options: `--de plasma|gnome` to force a desktop, `--no-bootstrap` to apply without generating a theme, `--purge` to also remove `~/.config/matugen`.
 
-### Command line
+## Layout
 
-```bash
-matugen-theme-sync status    # show the detected desktop environment + install state
-matugen-theme-sync apply     # deploy scripts, write matugen config, register + enable the systemd service,
-                             # then generate the first theme immediately
-matugen-theme-sync uninstall # stop the service, delete the service file and the helper scripts
-matugen-theme-sync show-ui   # open the GTK4 / libadwaita GUI
-```
-
-Options:
-
-- `apply --no-bootstrap` — install without generating a theme first.
-- `uninstall --purge` — also remove `~/.config/matugen` (config + templates).
-- `apply --de plasma|gnome` / `uninstall --de plasma|gnome` — force a desktop
-  environment instead of auto-detecting (mainly for testing).
-
-### GUI
-
-`matugen-theme-sync show-ui` opens a libadwaita window that shows the current
-desktop environment and offers two buttons:
-
-- **应用 (Apply)** — runs `matugen-theme-sync apply`.
-- **卸载 (Uninstall)** — asks for confirmation, then runs
-  `matugen-theme-sync uninstall`.
-
-Every command's output is streamed into the window so you can watch progress
-and the final result.
-
-## What apply does
-
-1. Installs the helper scripts into `~/.local/bin/`.
-2. Links `~/.local/bin/matugen-theme-sync` to this program.
-3. Writes the desktop-specific matugen config as `~/.config/matugen/config.toml`.
-4. Copies all templates into `~/.config/matugen/templates/`.
-5. Installs the matching unit as `~/.config/systemd/user/matugen-*.service`.
-6. Runs `systemctl --user daemon-reload` and `systemctl --user enable --now`.
-7. Runs the apply script once so the theme is generated immediately.
-
-## What uninstall does
-
-1. Stops and disables the service.
-2. Deletes the service file and runs `systemctl --user daemon-reload`.
-3. Deletes the helper scripts and the `matugen-theme-sync` link.
-4. Leaves `~/.config/matugen` intact unless `--purge` is given.
-
-## Requirements
-
-- `matugen`
-- `python3`
-- KDE Plasma: `kreadconfig6`, `kwriteconfig6`, `plasma-apply-colorscheme`
-- GNOME: `gsettings`
-- `inotify-tools` for immediate KDE updates (a polling fallback is included)
-- `flock`, `curl`
-- GUI: `python-gobject`, `gtk4`, `libadwaita`
-  (`sudo pacman -S python-gobject gtk4 libadwaita`)
-- Optional: `pywalfox` (or any pywal-based software) to consume the generated
-  `~/.cache/wal/colors.json` (`pipx install pywalfox`).
-
-## Switching desktop environments
-
-Just `apply` again after logging into the other desktop: the new environment is
-detected, the matching config is written, and the matching service is
-registered. Uninstall a desktop's pipeline the same way.
+- `bin/` — CLI + GUI and per-desktop apply/watch helpers
+- `matugen/` — matugen configs and shared templates
+- `systemd/` — user service units
+- `install.sh` — installer / uninstaller
