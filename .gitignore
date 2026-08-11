@@ -2,6 +2,7 @@
 .cache/
 *.tmp
 *.log
+__pycache__/
 
 # Editor state
 .idea/

@@ -18,6 +18,10 @@ systemd user service are deployed.
   integrated apps are refreshed.
 - The active mode also controls GTK 3/4, GNOME color preference, Kitty, Neovim,
   btop, tmux, Zellij, Cava, Starship, Yazi, and qt5ct/qt6ct palettes.
+- **wal / pywalfox**: matugen also writes a pywal-compatible color scheme to
+  `~/.cache/wal/colors.json` (official `pywalfox` theme), so software that
+  reads wal colors (pywal, pywalfox, pywal-based dotfiles, …) follows the
+  matugen theme automatically.
 
 ## Layout
 
@@ -27,7 +31,8 @@ systemd user service are deployed.
   the `gnome-dotfiles` repo).
 - `matugen/config-plasma.toml`, `matugen/config-gnome.toml`: matugen
   configurations, selected by the detected desktop environment.
-- `matugen/templates/`: source templates shared by both configurations.
+- `matugen/templates/`: source templates shared by both configurations
+  (including `pywalfox-colors.json` for the wal/pywalfox output).
 - `systemd/`: systemd user service units for each desktop environment.
 - `install.sh`: one-click installer / uninstaller.
 
@@ -68,6 +73,9 @@ Remove everything it installed with:
 bin/matugen-theme-sync status
 bin/matugen-theme-sync show-ui
 ```
+
+After the first `apply`, `~/.local/bin/matugen-theme-sync` points at this
+program, so the bare command works everywhere on your PATH.
 
 ### Command line
 
@@ -125,17 +133,8 @@ and the final result.
 - `flock`, `curl`
 - GUI: `python-gobject`, `gtk4`, `libadwaita`
   (`sudo pacman -S python-gobject gtk4 libadwaita`)
-
-## Run from the repository
-
-```bash
-# from the repo root
-bin/matugen-theme-sync status
-bin/matugen-theme-sync show-ui
-```
-
-After the first `apply`, `~/.local/bin/matugen-theme-sync` points at this
-program, so the bare command works everywhere on your PATH.
+- Optional: `pywalfox` (or any pywal-based software) to consume the generated
+  `~/.cache/wal/colors.json` (`pipx install pywalfox`).
 
 ## Switching desktop environments
 
