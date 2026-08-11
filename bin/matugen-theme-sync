@@ -27,7 +27,6 @@ LOCAL_BIN = HOME / ".local" / "bin"
 MATUGEN_CONFIG_DIR = HOME / ".config" / "matugen"
 SYSTEMD_USER_DIR = HOME / ".config" / "systemd" / "user"
 STATE_DIR = HOME / ".cache" / "matugen-plasma"
-WAL_COLORS_JSON = HOME / ".cache" / "wal" / "colors.json"
 
 DE_PLASMA = "plasma"
 DE_GNOME = "gnome"
@@ -213,34 +212,6 @@ def install_file(src, dst, mode=0o644):
     os.chmod(dst, mode)
 
 
-def wal_installed() -> bool:
-    """Whether the wal/pywalfox output is deployed (template + config entry)."""
-    config = MATUGEN_CONFIG_DIR / "config.toml"
-    template = MATUGEN_CONFIG_DIR / "templates" / "pywalfox-colors.json"
-    if not config.exists() or not template.exists():
-        return False
-    try:
-        content = config.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    return "[templates.pywalfox]" in content
-
-
-def wal_status_line() -> str:
-    """Describe the wal/pywalfox output state for status / GUI."""
-    if wal_installed():
-        mark = "\u2713"
-        state = f"已配置 \u2192 {WAL_COLORS_JSON}"
-        if not WAL_COLORS_JSON.exists():
-            state += " (尚未生成, apply 后自动生成)"
-        else:
-            state += " (已生成)"
-    else:
-        mark = "\u2717"
-        state = "未配置"
-    return f"{mark} wal/pywalfox 输出 \u2014 {state}"
-
-
 def check_dependencies(de):
     missing = []
     if not shutil.which("matugen"):
@@ -314,9 +285,6 @@ def cmd_apply(force_de=None, bootstrap=True):
             install_file(template, MATUGEN_CONFIG_DIR / "templates" / template.name)
             count += 1
     ok(f"matugen 模板: {count} 个文件 \u2192 ~/.config/matugen/templates/")
-    if (MATUGEN_CONFIG_DIR / "templates" / "pywalfox-colors.json").exists():
-        ok(f"wal/pywalfox 输出: 已配置 \u2192 ~/.cache/wal/colors.json "
-           f"({'已生成' if WAL_COLORS_JSON.exists() else '将在首次生成时创建'})")
 
     service_dst = SYSTEMD_USER_DIR / info_de["service"]
     install_file(SYSTEMD_DIR / info_de["service"], service_dst)
@@ -447,8 +415,6 @@ def cmd_status():
         mark = "\u2713" if (MATUGEN_CONFIG_DIR / "config.toml").exists() else "\u2717"
         print(f"  配置:   {mark} ~/.config/matugen/config.toml")
         print()
-    print(f"  {wal_status_line()}")
-    print()
     return 0
 
 
@@ -520,14 +486,6 @@ class SyncApp:
         if not self._supported:
             de_row.add_suffix(Gtk.Image(icon_name="dialog-warning-symbolic"))
         de_list.append(de_row)
-
-        wal_row = Adw.ActionRow(title="wal / pywalfox 输出")
-        wal_row.set_subtitle(
-            f"pywalfox-colors.json \u2192 ~/.cache/wal/colors.json\n"
-            f"状态: {'已配置' if wal_installed() else '未配置'}"
-        )
-        wal_row.add_prefix(Gtk.Image(icon_name="preferences-color-scheme-symbolic"))
-        de_list.append(wal_row)
         content.append(de_list)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
