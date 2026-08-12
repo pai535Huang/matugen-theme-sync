@@ -17,11 +17,13 @@ input_path = "~/.config/matugen/templates/gtk-import.css"
 output_path = "~/.config/gtk-4.0/gtk.css"
 
 [templates.gnome_shell]
-input_path = "~/.config/matugen/templates/gnome-shell.css"
+input_path = "~/.config/matugen/templates/gnome-shell-dark.css"
+input_path_modes = { light = "~/.config/matugen/templates/gnome-shell-light.css", dark = "~/.config/matugen/templates/gnome-shell-dark.css" }
 output_path = "~/.themes/Matugen/gnome-shell/gnome-shell.css"
 
 [templates.kitty]
-input_path = "~/.config/matugen/templates/kitty-colors.conf"
+input_path = "~/.config/matugen/templates/kitty-colors-dark.conf"
+input_path_modes = { light = "~/.config/matugen/templates/kitty-colors-light.conf", dark = "~/.config/matugen/templates/kitty-colors-dark.conf" }
 output_path = "~/.config/kitty/kitty-colors.conf"
 
 [templates.nvim]
@@ -33,7 +35,8 @@ input_path = "~/.config/matugen/templates/btop.theme"
 output_path = "~/.config/btop/themes/matugen.theme"
 
 [templates.cava]
-input_path = "~/.config/matugen/templates/cava-colors.ini"
+input_path = "~/.config/matugen/templates/cava-colors-dark.ini"
+input_path_modes = { light = "~/.config/matugen/templates/cava-colors-light.ini", dark = "~/.config/matugen/templates/cava-colors-dark.ini" }
 output_path = "~/.config/cava/colors.ini"
 
 [templates.tmux]

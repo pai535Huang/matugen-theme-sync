@@ -1,0 +1,82 @@
+stage {
+  color: {{colors.on_surface.default.hex}};
+}
+
+#panel {
+  color: {{colors.inverse_on_surface.light.hex}};
+  background-color: {{colors.scrim.default.hex}};
+}
+
+#panel .panel-button {
+  color: {{colors.inverse_on_surface.light.hex}};
+}
+
+#panel .panel-button:hover {
+  background-color: {{colors.surface_container_high.default.hex}};
+}
+
+.popup-menu-content,
+.quick-settings,
+.calendar,
+.message-list,
+.notification-banner,
+.dash-background {
+  color: {{colors.on_surface.default.hex}};
+  background-color: {{colors.surface_container.default.hex}};
+  border-color: {{colors.outline_variant.default.hex}};
+}
+
+.datemenu-today-button,
+.events-button,
+.world-clocks-button,
+.weather-button {
+  color: {{colors.on_surface.default.hex}};
+  background-color: {{colors.surface_container.default.hex}};
+}
+
+.datemenu-today-button:hover,
+.events-button:hover,
+.world-clocks-button:hover,
+.weather-button:hover {
+  background-color: {{colors.surface_container_high.default.hex}};
+}
+
+.quick-toggle,
+.quick-menu-toggle,
+.button,
+.message {
+  color: {{colors.on_surface.default.hex}};
+  background-color: {{colors.surface_container_high.default.hex}};
+}
+
+.quick-toggle:checked,
+.quick-menu-toggle:checked {
+  color: {{colors.on_primary.default.hex}};
+  background-color: {{colors.primary.default.hex}};
+}
+
+.slider,
+.level {
+  -barlevel-active-background-color: {{colors.primary.default.hex}};
+  -barlevel-background-color: {{colors.outline_variant.default.hex}};
+}
+
+.switcher-list,
+.workspace-switcher,
+.window-preview {
+  color: {{colors.on_surface.default.hex}};
+  background-color: {{colors.surface_container_high.default.hex}};
+  border-color: {{colors.outline_variant.default.hex}};
+}
+
+#uiGroup .modal-dialog,
+#uiGroup .run-dialog {
+  background: {{colors.surface_container_high.default.hex}} !important;
+  color: {{colors.on_surface.default.hex}} !important;
+  border: 1px solid {{colors.outline_variant.default.hex}} !important;
+}
+
+#uiGroup .quick-toggle-menu {
+  background: {{colors.surface_container.default.hex}} !important;
+  color: {{colors.on_surface.default.hex}} !important;
+}

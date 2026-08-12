@@ -29,7 +29,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_surface.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Complementary]
@@ -42,8 +42,8 @@ ForegroundInactive={{colors.on_surface_variant.light.hex}}
 ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
-ForegroundNormal={{colors.on_primary_container.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundNormal={{colors.on_surface.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Header]
@@ -57,7 +57,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_surface.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Header][Inactive]
@@ -71,7 +71,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_surface.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Selection]
@@ -79,14 +79,14 @@ BackgroundAlternate={{colors.surface_container_low.light.hex}}
 BackgroundNormal={{colors.primary_container.light.hex}}
 DecorationFocus={{colors.primary.light.hex}}
 DecorationHover={{colors.primary.light.hex}}
-ForegroundActive={{colors.on_primary_container.light.hex}}
-ForegroundInactive={{colors.on_surface_variant.light.hex}}
-ForegroundLink={{colors.secondary_fixed.light.hex}}
-ForegroundNegative={{colors.on_error_container.light.hex}}
-ForegroundNeutral={{colors.tertiary_fixed_dim.light.hex}}
-ForegroundNormal={{colors.on_primary_container.light.hex}}
-ForegroundPositive={{colors.on_tertiary_container.light.hex}}
-ForegroundVisited={{colors.on_secondary_container.light.hex}}
+ForegroundActive={{colors.on_primary_container.dark.hex}}
+ForegroundInactive={{colors.on_surface_variant.dark.hex}}
+ForegroundLink={{colors.secondary_fixed.dark.hex}}
+ForegroundNegative={{colors.on_error_container.dark.hex}}
+ForegroundNeutral={{colors.tertiary_fixed_dim.dark.hex}}
+ForegroundNormal={{colors.on_primary_container.dark.hex}}
+ForegroundPositive={{colors.on_tertiary_container.dark.hex}}
+ForegroundVisited={{colors.on_secondary_container.dark.hex}}
 
 [Colors:Tooltip]
 BackgroundAlternate={{colors.surface.light.hex}}
@@ -99,7 +99,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_background.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:View]
@@ -113,7 +113,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_background.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Window]
@@ -127,7 +127,7 @@ ForegroundLink={{colors.secondary.light.hex}}
 ForegroundNegative={{colors.error.light.hex}}
 ForegroundNeutral={{colors.tertiary.light.hex}}
 ForegroundNormal={{colors.on_background.light.hex}}
-ForegroundPositive={{colors.tertiary_fixed.light.hex}}
+ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [General]
