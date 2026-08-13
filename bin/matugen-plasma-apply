@@ -270,16 +270,21 @@ update_starship_palette() {
 reload_tmux() {
   command -v tmux >/dev/null 2>&1 || return 0
   tmux list-sessions >/dev/null 2>&1 || return 0
-  if ! tmux source-file "$HOME/.config/tmux/colors.conf" >/dev/null 2>&1; then
+  if ! tmux source-file "$HOME/.config/tmux/generated.conf" >/dev/null 2>&1; then
     log "Could not reload tmux colors"
     return 1
   fi
 }
 
+reload_cava() {
+  pgrep -x cava >/dev/null 2>&1 || return 0
+  pkill -USR1 cava 2>/dev/null
+}
+
 reload_kitty() {
   pgrep -x kitty >/dev/null 2>&1 || return 0
   if command -v kitty >/dev/null 2>&1 \
-    && kitty @ set-colors --all --configured "$HOME/.config/kitty/kitty-colors.conf" >/dev/null 2>&1; then
+    && kitty +kitten themes --reload-in=all Matugen >/dev/null 2>&1; then
     return 0
   fi
   pkill -SIGUSR1 kitty 2>/dev/null
@@ -381,14 +386,14 @@ required_outputs=(
   "$HOME/.config/gtk-4.0/gtk.css"
   "$HOME/.config/gtk-4.0/colors.css"
   "$HOME/.themes/Matugen/gnome-shell/gnome-shell.css"
-  "$HOME/.config/kitty/kitty-colors.conf"
+  "$HOME/.config/kitty/themes/Matugen.conf"
   "$HOME/.config/nvim/colors/matugen.vim"
   "$HOME/.config/btop/themes/matugen.theme"
-  "$HOME/.config/cava/colors.ini"
-  "$HOME/.config/tmux/colors.conf"
+  "$HOME/.config/cava/themes/matugen"
+  "$HOME/.config/tmux/generated.conf"
   "$HOME/.config/zellij/themes/matugen.kdl"
   "$HOME/.config/matugen/themes/starship-colors.toml"
-  "$HOME/.config/yazi/colors.toml"
+  "$HOME/.config/yazi/theme.toml"
   "$HOME/.config/matugen/themes/obsidian.css"
   "$HOME/.config/qt5ct/colors/matugen.conf"
   "$HOME/.config/qt6ct/colors/matugen.conf"
@@ -445,6 +450,7 @@ update_starship_palette || sync_ok=0
 reload_kitty || sync_ok=0
 reload_nvim || sync_ok=0
 reload_btop || sync_ok=0
+reload_cava || sync_ok=0
 reload_tmux || sync_ok=0
 
 # A scheme-triggered run starts after System Settings has already selected it.

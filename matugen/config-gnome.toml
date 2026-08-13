@@ -17,8 +17,8 @@ output_path = "~/.themes/Matugen/gnome-shell/gnome-shell.css"
 [templates.kitty]
 input_path = "~/.config/matugen/templates/kitty-colors-dark.conf"
 input_path_modes = { light = "~/.config/matugen/templates/kitty-colors-light.conf", dark = "~/.config/matugen/templates/kitty-colors-dark.conf" }
-output_path = "~/.config/kitty/kitty-colors.conf"
-post_hook = "kitty @ set-colors --all --configured ~/.config/kitty/kitty-colors.conf >/dev/null 2>&1 || pkill -SIGUSR1 kitty 2>/dev/null || true"
+output_path = "~/.config/kitty/themes/Matugen.conf"
+post_hook = "kitty +kitten themes --reload-in=all Matugen >/dev/null 2>&1 || pkill -SIGUSR1 kitty 2>/dev/null || true"
 
 [templates.nvim]
 input_path = "~/.config/matugen/templates/nvim-colors.vim"
@@ -33,11 +33,12 @@ post_hook = "pkill -USR2 btop 2>/dev/null || true"
 [templates.cava]
 input_path = "~/.config/matugen/templates/cava-colors-dark.ini"
 input_path_modes = { light = "~/.config/matugen/templates/cava-colors-light.ini", dark = "~/.config/matugen/templates/cava-colors-dark.ini" }
-output_path = "~/.config/cava/colors.ini"
+output_path = "~/.config/cava/themes/matugen"
+post_hook = "pkill -USR1 cava 2>/dev/null || true"
 
 [templates.tmux]
 input_path = "~/.config/matugen/templates/tmux-colors.conf"
-output_path = "~/.config/tmux/colors.conf"
+output_path = "~/.config/tmux/generated.conf"
 
 [templates.zellij]
 input_path = "~/.config/matugen/templates/zellij-theme.kdl.tera"
@@ -49,7 +50,7 @@ output_path = "~/.config/matugen/themes/starship-colors.toml"
 
 [templates.yazi]
 input_path = "~/.config/matugen/templates/yazi-theme.toml"
-output_path = "~/.config/yazi/colors.toml"
+output_path = "~/.config/yazi/theme.toml"
 
 [templates.obsidian]
 input_path = "~/.config/matugen/templates/obsidian.css"
