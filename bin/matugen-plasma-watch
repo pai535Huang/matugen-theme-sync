@@ -2,6 +2,7 @@
 set -euo pipefail
 
 CONFIG_DIR="$HOME/.config"
+POTD_CACHE_DIR="$HOME/.cache/plasma_engine_potd"
 WALLPAPER_CONFIG="plasma-org.kde.plasma.desktop-appletsrc"
 KDE_CONFIG="kdeglobals"
 APPLY="$HOME/.local/bin/matugen-plasma-apply"
@@ -37,43 +38,77 @@ apply_for_event() {
     trigger="wallpaper"
   fi
   # The apply script reads the mode again after acquiring its lock.
-  "$APPLY" "$trigger" "${force_argument[@]}"
+  "$APPLY" "$trigger" "${force_argument[@]}" || log "Theme sync failed for $trigger"
 }
 
 mode="$(current_mode)" || mode=""
 last_mode="$mode"
 if [[ -n "$mode" ]]; then
-  "$APPLY" startup
+  "$APPLY" startup || log "Startup theme sync failed"
 else
   log "Select MatugenLight or MatugenDark to enable global theme synchronization"
 fi
 
 if command -v inotifywait >/dev/null 2>&1; then
-  log "Watching Plasma wallpaper and KDE color scheme via inotify"
+  mkdir -p "$POTD_CACHE_DIR"
+  log "Watching Plasma wallpaper, KDE color scheme, and POTD cache via inotify"
   # Directory watches survive the atomic file replacement used by Plasma.
   inotifywait -m -q -e close_write,moved_to,create \
-    --include "($WALLPAPER_CONFIG|$KDE_CONFIG)" \
-    --format '%f' "$CONFIG_DIR" 2>/dev/null \
-    | while read -r file; do
-        pending_file="$file"
+    --format '%w%f' "$CONFIG_DIR" "$POTD_CACHE_DIR" 2>/dev/null \
+    | while read -r path; do
+        pending_file=""
+        case "$path" in
+          "$CONFIG_DIR/$WALLPAPER_CONFIG") pending_file="$WALLPAPER_CONFIG" ;;
+          "$CONFIG_DIR/$KDE_CONFIG") pending_file="$KDE_CONFIG" ;;
+          "$POTD_CACHE_DIR"/*)
+            file="${path##*/}"
+            case "$file" in
+              *.json|*.conf|*.lock) continue ;;
+            esac
+            pending_file="potd" ;;
+          *) continue ;;
+        esac
+
         # Consume all events until Plasma has been quiet for half a second.
-        while read -r -t 0.5 next_file; do
+        while read -r -t 0.5 next_path; do
+          next_file=""
+          case "$next_path" in
+            "$CONFIG_DIR/$WALLPAPER_CONFIG") next_file="$WALLPAPER_CONFIG" ;;
+            "$CONFIG_DIR/$KDE_CONFIG") next_file="$KDE_CONFIG" ;;
+            "$POTD_CACHE_DIR"/*)
+              file="${next_path##*/}"
+              case "$file" in
+                *.json|*.conf|*.lock) continue ;;
+              esac
+              next_file="potd" ;;
+            *) continue ;;
+          esac
+
+          # Priority: wallpaper config > kdeglobals > potd cache.
           if [[ "$next_file" == "$WALLPAPER_CONFIG" ]]; then
             pending_file="$WALLPAPER_CONFIG"
           elif [[ "$pending_file" != "$WALLPAPER_CONFIG" ]]; then
-            pending_file="$next_file"
+            if [[ "$next_file" == "$KDE_CONFIG" ]]; then
+              pending_file="$KDE_CONFIG"
+            elif [[ "$pending_file" != "$KDE_CONFIG" ]]; then
+              pending_file="$next_file"
+            fi
           fi
         done
+
         apply_for_event "$pending_file"
       done
 else
+  mkdir -p "$POTD_CACHE_DIR"
   log "inotifywait not found; falling back to polling"
   wallpaper_stamp="$(stat -c '%Y:%s' "$CONFIG_DIR/$WALLPAPER_CONFIG" 2>/dev/null || true)"
   kde_stamp="$(stat -c '%Y:%s' "$CONFIG_DIR/$KDE_CONFIG" 2>/dev/null || true)"
+  potd_stamp="$(stat -c '%Y:%s' "$POTD_CACHE_DIR" 2>/dev/null || true)"
   while true; do
     sleep 5
     next_wallpaper_stamp="$(stat -c '%Y:%s' "$CONFIG_DIR/$WALLPAPER_CONFIG" 2>/dev/null || true)"
     next_kde_stamp="$(stat -c '%Y:%s' "$CONFIG_DIR/$KDE_CONFIG" 2>/dev/null || true)"
+    next_potd_stamp="$(stat -c '%Y:%s' "$POTD_CACHE_DIR" 2>/dev/null || true)"
     if [[ "$next_wallpaper_stamp" != "$wallpaper_stamp" ]]; then
       wallpaper_stamp="$next_wallpaper_stamp"
       apply_for_event "$WALLPAPER_CONFIG"
@@ -81,6 +116,10 @@ else
     if [[ "$next_kde_stamp" != "$kde_stamp" ]]; then
       kde_stamp="$next_kde_stamp"
       apply_for_event "$KDE_CONFIG"
+    fi
+    if [[ "$next_potd_stamp" != "$potd_stamp" ]]; then
+      potd_stamp="$next_potd_stamp"
+      apply_for_event "potd"
     fi
   done
 fi

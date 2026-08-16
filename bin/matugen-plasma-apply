@@ -169,6 +169,29 @@ for containment_id, data in desktops:
         if match:
             print('col:#%02x%02x%02x' % tuple(int(value) for value in match.groups()))
             sys.exit(0)
+    elif plugin == 'org.kde.potd':
+        cache_dir = os.path.expanduser('~/.cache/plasma_engine_potd')
+        if os.path.isdir(cache_dir):
+            provider = wallpaper.get('Provider', '')
+            candidates = []
+            for name in os.listdir(cache_dir):
+                if name.endswith(('.json', '.conf', '.lock')):
+                    continue
+                path = os.path.join(cache_dir, name)
+                if not os.path.isfile(path):
+                    continue
+                if provider:
+                    if name != provider and not name.startswith(provider + ':'):
+                        continue
+                candidates.append((os.path.getmtime(path), path))
+            if candidates:
+                candidates.sort(reverse=True)
+                print('img:' + candidates[0][1])
+                sys.exit(0)
+        # The selected POTD provider has no cached image yet; do not fall
+        # back to an unrelated local wallpaper (that made colors look wrong).
+        # The watcher will retry when the cache file appears.
+        sys.exit(1)
     else:
         for key in ('lastValidImagePath', 'Image', 'image'):
             if key not in wallpaper:
@@ -210,6 +233,22 @@ resolve_image() {
     log "Wallpaper file not found: $local_image"
     return 1
   fi
+
+  # POTD cache images often have no extension (e.g. "bing:3840:2160");
+  # give matugen a symlink with a proper extension so format detection works.
+  if [[ ! "$local_image" =~ \.(jpg|jpeg|png|webp|bmp)$ ]]; then
+    local mime="" ext="jpg"
+    mime="$(file --brief --mime-type "$local_image" 2>/dev/null || true)"
+    case "$mime" in
+      image/jpeg) ext="jpg" ;;
+      image/png) ext="png" ;;
+      image/webp) ext="webp" ;;
+      image/bmp) ext="bmp" ;;
+    esac
+    ln -sf "$local_image" "$STATE_DIR/local-current.$ext"
+    local_image="$STATE_DIR/local-current.$ext"
+  fi
+
   printf '%s\n' "$local_image"
 }
 
@@ -455,7 +494,7 @@ reload_tmux || sync_ok=0
 
 # A scheme-triggered run starts after System Settings has already selected it.
 # Wallpaper refreshes must force KDE to reload the regenerated file.
-if [[ "$trigger" != scheme ]] || (( kde_needs_refresh )); then
+if [[ "$trigger" != scheme ]] || (( kde_needs_refresh || force )); then
   apply_kde_scheme "$mode" || sync_ok=0
 fi
 
