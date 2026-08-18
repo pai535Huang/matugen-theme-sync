@@ -56,6 +56,12 @@ clone_source() {
 
 install_files() {
   local src="$1"
+  # 全量重装: 先清掉旧安装副本, 避免 cp -a 只增不删导致废弃文件残留
+  if [[ "$(basename "$INSTALL_DIR")" != "$APP_NAME" ]]; then
+    error "refusing to remove unexpected directory: $INSTALL_DIR"
+    return 1
+  fi
+  rm -rf "$INSTALL_DIR"
   install -d "$INSTALL_DIR"
   cp -a "$src/bin" "$src/matugen" "$src/systemd" "$INSTALL_DIR/"
   cp "$src/install.sh" "$INSTALL_DIR/install.sh"

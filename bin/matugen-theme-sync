@@ -286,6 +286,18 @@ def cmd_apply(force_de=None, bootstrap=True):
             count += 1
     ok(f"matugen 模板: {count} 个文件 \u2192 ~/.config/matugen/templates/")
 
+    # 清理目标目录中源模板已不存在的废弃文件(如改名/删除后残留的旧模板)
+    templates_dst = MATUGEN_CONFIG_DIR / "templates"
+    source_names = {p.name for p in TEMPLATES_DIR.iterdir() if p.is_file()}
+    removed = 0
+    if templates_dst.is_dir():
+        for stale in templates_dst.iterdir():
+            if stale.is_file() and stale.name not in source_names:
+                stale.unlink()
+                removed += 1
+    if removed:
+        ok(f"matugen 模板: 清理 {removed} 个已废弃模板文件")
+
     service_dst = SYSTEMD_USER_DIR / info_de["service"]
     install_file(SYSTEMD_DIR / info_de["service"], service_dst)
     ok(f"systemd 服务: {service_dst}")
