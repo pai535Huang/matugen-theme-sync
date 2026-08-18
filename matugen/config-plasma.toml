@@ -59,13 +59,13 @@ output_path = "~/.config/yazi/theme.toml"
 input_path = "~/.config/matugen/templates/obsidian.css"
 output_path = "~/.config/matugen/themes/obsidian.css"
 
-[templates.qt5ct]
-input_path = "~/.config/matugen/templates/qtct-colors.conf"
-output_path = "~/.config/qt5ct/colors/matugen.conf"
+# [templates.qt5ct]
+# input_path = "~/.config/matugen/templates/qtct-colors.conf"
+# output_path = "~/.config/qt5ct/colors/matugen.conf"
 
-[templates.qt6ct]
-input_path = "~/.config/matugen/templates/qtct-colors.conf"
-output_path = "~/.config/qt6ct/colors/matugen.conf"
+# [templates.qt6ct]
+# input_path = "~/.config/matugen/templates/qtct-colors.conf"
+# output_path = "~/.config/qt6ct/colors/matugen.conf"
 
 [templates.pywalfox]
 input_path = "~/.config/matugen/templates/pywalfox-colors.json"
@@ -79,3 +79,11 @@ output_path = "~/.local/share/color-schemes/MatugenLight.colors"
 [templates.kde_color_scheme_dark]
 input_path = "~/.config/matugen/templates/kde-colors-dark.colors"
 output_path = "~/.local/share/color-schemes/MatugenDark.colors"
+
+[templates.kvantum_kvconfig]
+input_path = '~/.config/matugen/templates/kvantum-colors.kvconfig'
+output_path = '~/.config/Kvantum/matugen/matugen.kvconfig'
+
+[templates.kvantum_svg]
+input_path = '~/.config/matugen/templates/kvantum-colors.svg'
+output_path = '~/.config/Kvantum/matugen/matugen.svg'
