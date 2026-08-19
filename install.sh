@@ -8,6 +8,9 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 INSTALL_DIR="$XDG_DATA_HOME/$APP_NAME"
 LOCAL_BIN="$HOME/.local/bin"
 APP_DIRS="$XDG_DATA_HOME/applications"
+MATUGEN_INSTALL_TTY="${MATUGEN_INSTALL_TTY:-/dev/tty}"
+PACMAN_CONFIG_FILE="${PACMAN_CONFIG_FILE:-/etc/pacman.conf}"
+MATUGEN_INSTALL_EUID="${MATUGEN_INSTALL_EUID:-$EUID}"
 
 GREEN='\033[32m'
 YELLOW='\033[33m'
@@ -18,7 +21,7 @@ RESET='\033[0m'
 info() { printf "${BOLD}[%s]${RESET} %s\n" "$APP_NAME" "$*"; }
 ok()   { printf "${GREEN}[%s] OK: %s${RESET}\n" "$APP_NAME" "$*"; }
 warn() { printf "${YELLOW}[%s] WARN: %s${RESET}\n" "$APP_NAME" "$*"; }
-error(){ printf "${RED}[%s] ERROR: %s${RESET}\n" "$APP_NAME" "$*"; }
+error(){ printf "${RED}[%s] ERROR: %s${RESET}\n" "$APP_NAME" "$*" >&2; }
 
 usage() {
   cat <<EOF
@@ -90,9 +93,96 @@ EOF
   ok "GUI entry: $APP_DIRS/$APP_NAME.desktop"
 }
 
+run_as_root() {
+  if (( MATUGEN_INSTALL_EUID == 0 )); then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    error "sudo is required to install matugen"
+    return 1
+  fi
+}
+
+detect_package_manager() {
+  if command -v pacman >/dev/null 2>&1 && [[ -f "$PACMAN_CONFIG_FILE" ]]; then
+    printf '%s\n' pacman
+  elif command -v dnf >/dev/null 2>&1; then
+    printf '%s\n' dnf
+  elif command -v apt-get >/dev/null 2>&1; then
+    printf '%s\n' apt-get
+  else
+    return 1
+  fi
+}
+
+matugen_available() {
+  command -v matugen >/dev/null 2>&1 || [[ -x "$LOCAL_BIN/matugen" ]]
+}
+
+confirm_matugen_install() {
+  local answer
+  printf 'matugen is required but not installed. Install it now? [y/N] '
+  if ! read -r answer 2>/dev/null < "$MATUGEN_INSTALL_TTY"; then
+    error "matugen is required; no interactive terminal is available"
+    return 1
+  fi
+  [[ "${answer,,}" == y || "${answer,,}" == yes ]]
+}
+
+install_matugen() {
+  local manager="$1"
+  case "$manager" in
+    pacman)
+      run_as_root pacman -S --needed --noconfirm matugen
+      ;;
+    dnf)
+      run_as_root dnf -y install matugen
+      ;;
+    apt-get)
+      run_as_root apt-get update || return 1
+      run_as_root apt-get install -y cargo || return 1
+      command -v cargo >/dev/null 2>&1 || {
+        error "cargo is unavailable after apt installation"
+        return 1
+      }
+      cargo install --root "$HOME/.local" matugen
+      ;;
+    *)
+      error "unsupported package manager: $manager"
+      return 1
+      ;;
+  esac
+}
+
+ensure_matugen() {
+  local manager
+  matugen_available && {
+    ok "matugen dependency OK"
+    return 0
+  }
+  if ! confirm_matugen_install; then
+    error "matugen is required; installation cancelled"
+    return 1
+  fi
+  manager="$(detect_package_manager)" || {
+    error "no supported package manager found (pacman, dnf, apt)"
+    return 1
+  }
+  info "installing matugen with $manager"
+  install_matugen "$manager" || {
+    error "failed to install matugen"
+    return 1
+  }
+  matugen_available || {
+    error "matugen installation finished, but the executable was not found"
+    return 1
+  }
+  ok "matugen installed"
+}
+
 check_dependencies() {
   local missing=()
-  command -v matugen >/dev/null 2>&1 || missing+=("matugen")
   command -v python3 >/dev/null 2>&1 || missing+=("python3")
   if ! python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1')" >/dev/null 2>&1; then
     missing+=("python-gobject gtk4 libadwaita")
@@ -100,7 +190,7 @@ check_dependencies() {
   command -v gsettings >/dev/null 2>&1 || missing+=("gsettings (glib2)")
   if (( ${#missing[@]} )); then
     warn "missing dependencies: ${missing[*]}"
-    printf '  install: sudo pacman -S matugen python-gobject gtk4 libadwaita glib2\n'
+    printf '  install them with your distribution package manager\n'
   else
     ok "dependencies OK"
   fi
@@ -115,6 +205,7 @@ check_path() {
 do_install() {
   local src
   info "installing $APP_NAME"
+  ensure_matugen || return 1
   src="$(find_source)" || src="$(clone_source)" || {
     error "cannot obtain the sources. Run this script from the repository, or install git "
     error "so it can be cloned from $REPO_URL automatically."
@@ -166,10 +257,16 @@ do_uninstall() {
   ok "uninstall done"
 }
 
-cmd="${1:-install}"
-case "$cmd" in
-  install) do_install ;;
-  uninstall) do_uninstall ;;
-  -h|--help|help) usage ;;
-  *) usage; exit 2 ;;
-esac
+main() {
+  local cmd="${1:-install}"
+  case "$cmd" in
+    install) do_install ;;
+    uninstall) do_uninstall ;;
+    -h|--help|help) usage ;;
+    *) usage; return 2 ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

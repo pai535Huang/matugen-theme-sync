@@ -17,9 +17,20 @@ Generate wallpaper-derived light/dark themes with [matugen](https://github.com/I
 - GNOME: `gsettings`
 - GUI: `python-gobject`, `gtk4`, `libadwaita`
 
-```bash
-sudo pacman -S matugen python-gobject gtk4 libadwaita glib2 inotify-tools
-```
+The installer checks for `matugen` before writing any project files. If it is
+missing, it asks for confirmation with a safe `[y/N]` default, detects the
+available package manager, and uses the matching flow:
+
+| Distribution family | Automatic install |
+| --- | --- |
+| Arch | `pacman -S --needed --noconfirm matugen` |
+| Fedora | `dnf -y install matugen` |
+| Debian / Ubuntu | `apt-get` installs Cargo, then `cargo install --root ~/.local matugen` |
+
+The Debian fallback builds Matugen with Cargo and places it in
+`~/.local/bin`. Make sure that directory is in your `PATH`. Other
+desktop-specific and GUI dependencies remain non-blocking and must be
+installed with your distribution package manager when needed.
 
 ## Install
 
@@ -28,7 +39,7 @@ sudo pacman -S matugen python-gobject gtk4 libadwaita glib2 inotify-tools
 ./install.sh
 
 # or straight from GitHub:
-curl -fsSL https://raw.githubusercontent.com/pai535Huang/matugen-theme-sync/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pai535Huang/matugen-theme-sync/main/install.sh | bash
 ```
 
 Installs to `~/.local/share/matugen-theme-sync/`, links the `matugen-theme-sync` command into `~/.local/bin/`, and adds an app-menu entry.
