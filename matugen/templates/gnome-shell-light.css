@@ -9,10 +9,18 @@ stage {
 
 #panel .panel-button {
   color: {{colors.inverse_on_surface.light.hex}};
+  border-radius: 999px;
+  transition-duration: 150ms;
 }
 
-#panel .panel-button:hover {
+#panel .panel-button:hover,
+#panel .panel-button:focus {
   background-color: {{colors.surface_container_high.default.hex}};
+}
+
+#panel .panel-button:active,
+#panel .panel-button:checked {
+  background-color: {{colors.surface_container_highest.default.hex}};
 }
 
 .popup-menu-content,
@@ -23,7 +31,9 @@ stage {
 .dash-background {
   color: {{colors.on_surface.default.hex}};
   background-color: {{colors.surface_container.default.hex}};
-  border-color: {{colors.outline_variant.default.hex}};
+  border: 1px solid {{colors.outline_variant.default.hex}};
+  border-radius: 16px;
+  box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.18);
 }
 
 .datemenu-today-button,
@@ -31,7 +41,10 @@ stage {
 .world-clocks-button,
 .weather-button {
   color: {{colors.on_surface.default.hex}};
-  background-color: {{colors.surface_container.default.hex}};
+  background-color: {{colors.surface_container_low.default.hex}};
+  border: 1px solid {{colors.outline_variant.default.hex}};
+  border-radius: 12px;
+  transition-duration: 150ms;
 }
 
 .datemenu-today-button:hover,
@@ -47,12 +60,23 @@ stage {
 .message {
   color: {{colors.on_surface.default.hex}};
   background-color: {{colors.surface_container_high.default.hex}};
+  border: 1px solid {{colors.outline_variant.default.hex}};
+  border-radius: 12px;
+  transition-duration: 150ms;
+}
+
+.quick-toggle:hover,
+.quick-menu-toggle:hover,
+.button:hover,
+.message:hover {
+  background-color: {{colors.surface_container_highest.default.hex}};
 }
 
 .quick-toggle:checked,
 .quick-menu-toggle:checked {
-  color: {{colors.on_primary.default.hex}};
-  background-color: {{colors.primary.default.hex}};
+  color: {{colors.on_secondary_container.default.hex}};
+  background-color: {{colors.secondary_container.default.hex}};
+  border-color: {{colors.secondary.default.hex}};
 }
 
 .slider,
@@ -66,7 +90,9 @@ stage {
 .window-preview {
   color: {{colors.on_surface.default.hex}};
   background-color: {{colors.surface_container_high.default.hex}};
-  border-color: {{colors.outline_variant.default.hex}};
+  border: 1px solid {{colors.outline_variant.default.hex}};
+  border-radius: 14px;
+  box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.18);
 }
 
 #uiGroup .modal-dialog,
@@ -74,9 +100,13 @@ stage {
   background: {{colors.surface_container_high.default.hex}} !important;
   color: {{colors.on_surface.default.hex}} !important;
   border: 1px solid {{colors.outline_variant.default.hex}} !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.22) !important;
 }
 
 #uiGroup .quick-toggle-menu {
   background: {{colors.surface_container.default.hex}} !important;
   color: {{colors.on_surface.default.hex}} !important;
+  border: 1px solid {{colors.outline_variant.default.hex}} !important;
+  border-radius: 14px !important;
 }

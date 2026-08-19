@@ -1,13 +1,21 @@
 [config]
 
+[templates.gtk3_import]
+input_path = "~/.config/matugen/templates/gtk-import.css"
+output_path = "~/.config/gtk-3.0/gtk.css"
+
 [templates.gtk3]
 input_path = "~/.config/matugen/templates/gtk-colors.css"
 output_path = "~/.config/gtk-3.0/colors.css"
 post_hook = "gsettings set org.gnome.desktop.interface gtk-theme '' >/dev/null 2>&1; gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3-{{mode}} >/dev/null 2>&1 || dbus-run-session -- gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3-{{mode}}"
 
 [templates.gtk4]
-input_path = "~/.config/matugen/templates/gtk-colors.css"
+input_path = "~/.config/matugen/templates/gtk4-colors.css"
 output_path = "~/.config/gtk-4.0/colors.css"
+
+[templates.gtk4_import]
+input_path = "~/.config/matugen/templates/gtk-import.css"
+output_path = "~/.config/gtk-4.0/gtk.css"
 
 [templates.gnome_shell]
 input_path = "~/.config/matugen/templates/gnome-shell-dark.css"

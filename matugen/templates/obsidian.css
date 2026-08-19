@@ -1,16 +1,22 @@
 /* Matugen Obsidian Dynamic Colors Snippet
- * Place output in: <vault>/.obsidian/snippets/matugen.css
- * Then enable it in: Settings → Appearance → CSS Snippets
+ * Generated at: ~/.config/matugen/themes/obsidian.css
+ * To use it, link or copy it to: <vault>/.obsidian/snippets/matugen.css
+ * Then enable it in: Settings → Appearance → CSS snippets
  */
 
-.theme-dark, .theme-light {
+.theme-dark,
+.theme-light {
 
-    /* ── Material You RGB helpers ──────────────────────────── */
-    --mat-bg-rgb:             {{colors.background.default.red}}, {{colors.background.default.green}}, {{colors.background.default.blue}};
-    --mat-surface-rgb:        {{colors.surface.default.red}}, {{colors.surface.default.green}}, {{colors.surface.default.blue}};
-    --mat-on-surface-rgb:     {{colors.on_surface.default.red}}, {{colors.on_surface.default.green}}, {{colors.on_surface.default.blue}};
-    --mat-primary-rgb:        {{colors.primary.default.red}}, {{colors.primary.default.green}}, {{colors.primary.default.blue}};
-    --mat-on-primary-rgb:     {{colors.on_primary.default.red}}, {{colors.on_primary.default.green}}, {{colors.on_primary.default.blue}};
+    /* ── Material surface aliases ───────────────────────────── */
+    --mat-surface: {{colors.surface.default.hex}};
+    --mat-surface-container-low: {{colors.surface_container_low.default.hex}};
+    --mat-surface-container: {{colors.surface_container.default.hex}};
+    --mat-surface-container-high: {{colors.surface_container_high.default.hex}};
+    --mat-surface-container-highest: {{colors.surface_container_highest.default.hex}};
+    --mat-on-surface: {{colors.on_surface.default.hex}};
+    --mat-secondary-container: {{colors.secondary_container.default.hex}};
+    --mat-on-secondary-container: {{colors.on_secondary_container.default.hex}};
+    --mat-outline-variant: {{colors.outline_variant.default.hex}};
 
     /* ── Core Backgrounds ──────────────────────────────────── */
     --background-primary:           {{colors.background.default.hex}};
@@ -33,18 +39,21 @@
     --text-muted:       {{colors.on_surface_variant.default.hex}};
     --text-faint:       {{colors.outline.default.hex}};
     --text-on-accent:   {{colors.on_primary.default.hex}};
-    --text-selection:   rgba({{colors.primary.default.red}}, {{colors.primary.default.green}}, {{colors.primary.default.blue}}, 0.25);
+    --text-selection:   color-mix(in oklch, {{colors.primary.default.hex}} 24%, transparent);
 
     /* ── Accent & Interactive ──────────────────────────────── */
+    --interactive-normal:           var(--mat-surface-container);
+    --interactive-hover:            var(--mat-surface-container-high);
     --interactive-accent:           {{colors.primary.default.hex}};
     --interactive-accent-hover:     {{colors.primary_container.default.hex}};
-    --interactive-accent-rgb:       {{colors.primary.default.red}}, {{colors.primary.default.green}}, {{colors.primary.default.blue}};
     --text-accent:                  {{colors.primary.default.hex}};
     --text-accent-hover:            {{colors.primary_container.default.hex}};
 
     /* ── Hover & Active Modifiers ──────────────────────────── */
-    --background-modifier-hover:          rgba(var(--mat-on-surface-rgb), 0.06);
-    --background-modifier-active-hover:   rgba(var(--mat-primary-rgb), 0.15);
+    --background-modifier-hover:          color-mix(in oklch, var(--mat-on-surface) 7%, transparent);
+    --background-modifier-active-hover:   var(--mat-secondary-container);
+    --background-modifier-form-field:     var(--mat-surface-container-low);
+    --background-modifier-message:        var(--mat-surface-container-high);
     --background-modifier-success:        {{colors.tertiary_container.default.hex}};
     --background-modifier-error:          {{colors.error_container.default.hex}};
     --background-modifier-error-hover:    {{colors.error.default.hex}};
@@ -88,11 +97,11 @@
     --link-unresolved-color: {{colors.outline.default.hex}};
 
     /* ── Tags ──────────────────────────────────────────────── */
-    --tag-color:            {{colors.on_primary_container.default.hex}};
-    --tag-background:       {{colors.primary_container.default.hex}};
-    --tag-border-color:     {{colors.primary.default.hex}};
-    --tag-color-hover:      {{colors.on_primary.default.hex}};
-    --tag-background-hover: {{colors.primary.default.hex}};
+    --tag-color:            {{colors.on_secondary_container.default.hex}};
+    --tag-background:       {{colors.secondary_container.default.hex}};
+    --tag-border-color:     {{colors.outline_variant.default.hex}};
+    --tag-color-hover:      {{colors.on_primary_container.default.hex}};
+    --tag-background-hover: {{colors.primary_container.default.hex}};
 
     /* ── Checkboxes ────────────────────────────────────────── */
     --checkbox-color:           {{colors.primary.default.hex}};
@@ -115,13 +124,28 @@
     --code-value:       {{colors.secondary.default.hex}};
 
     /* ── Scrollbar ─────────────────────────────────────────── */
-    --scrollbar-thumb-bg:           rgba(var(--mat-on-surface-rgb), 0.12);
-    --scrollbar-active-thumb-bg:    rgba(var(--mat-on-surface-rgb), 0.25);
+    --scrollbar-thumb-bg:           color-mix(in oklch, var(--mat-on-surface) 12%, transparent);
+    --scrollbar-active-thumb-bg:    color-mix(in oklch, var(--mat-on-surface) 28%, transparent);
     --scrollbar-bg:                 transparent;
 
     /* ── Inputs ────────────────────────────────────────────── */
-    --input-shadow: none;
-    --input-shadow-hover: 0 0 0 2px {{colors.outline.default.hex}};
+    --input-shadow: 0 0 0 1px var(--mat-outline-variant);
+    --input-shadow-hover: 0 0 0 2px color-mix(in oklch, {{colors.primary.default.hex}} 55%, transparent);
+
+    /* ── Tabs ──────────────────────────────────────────────── */
+    --tab-container-background: var(--mat-surface-container-low);
+    --tab-background-active: var(--mat-surface-container-high);
+    --tab-divider-color: transparent;
+    --tab-outline-color: var(--mat-outline-variant);
+    --tab-outline-width: 1px;
+    --tab-radius: 8px;
+    --tab-radius-active: 8px;
+
+    /* ── Modals ────────────────────────────────────────────── */
+    --modal-background: var(--mat-surface-container-high);
+    --modal-border-width: 1px;
+    --modal-border-color: var(--mat-outline-variant);
+    --modal-radius: 12px;
 
     /* ── Graph View ────────────────────────────────────────── */
     --graph-node:           {{colors.primary.default.hex}};
@@ -134,7 +158,108 @@
 
 }
 
-/* ── Active line highlight ─────────────────────────────────── */
+/* ── Workspace navigation ─────────────────────────────────── */
+.workspace-tab-header,
+.nav-file-title,
+.nav-folder-title,
+.tree-item-self,
+.suggestion-item,
+.menu-item {
+    border-radius: 8px;
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+.workspace-tab-header.is-active,
+.nav-file-title.is-active,
+.nav-folder-title.is-active,
+.tree-item-self.is-active,
+.suggestion-item.is-selected {
+    color: var(--mat-on-secondary-container);
+    background-color: var(--mat-secondary-container);
+}
+
+.workspace-tab-header:not(.is-active):hover,
+.nav-file-title:hover,
+.nav-folder-title:hover,
+.tree-item-self:hover,
+.suggestion-item:hover,
+.menu-item:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+/* ── Floating surfaces ────────────────────────────────────── */
+.modal,
+.popover,
+.menu,
+.suggestion-container {
+    background-color: var(--mat-surface-container-high);
+    border: 1px solid var(--mat-outline-variant);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px color-mix(in oklch, black 22%, transparent);
+}
+
+/* ── Controls ─────────────────────────────────────────────── */
+input[type="text"],
+input[type="search"],
+textarea,
+select,
+button:not(.clickable-icon) {
+    border-radius: 8px;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+    border-color: {{colors.primary.default.hex}};
+    box-shadow: 0 0 0 2px color-mix(in oklch, {{colors.primary.default.hex}} 35%, transparent);
+}
+
+/* ── Document surfaces ────────────────────────────────────── */
+.tag {
+    border: 1px solid color-mix(in oklch, var(--tag-color) 35%, transparent);
+    border-radius: 999px;
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+.markdown-rendered pre,
+.callout,
+blockquote {
+    background-color: var(--mat-surface-container-low);
+    border-color: var(--mat-outline-variant);
+    border-radius: 12px;
+}
+
+.HyperMD-codeblock-begin {
+    border-radius: 12px 12px 0 0;
+}
+
+.HyperMD-codeblock-end {
+    border-radius: 0 0 12px 12px;
+}
+
+.callout {
+    box-shadow: 0 2px 8px color-mix(in oklch, black 10%, transparent);
+}
+
 .cm-active {
-    background-color: rgba(var(--mat-on-surface-rgb), 0.03) !important;
+    background-color: color-mix(in oklch, var(--mat-on-surface) 3%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workspace-tab-header,
+    .nav-file-title,
+    .nav-folder-title,
+    .tree-item-self,
+    .suggestion-item,
+    .menu-item,
+    .tag,
+    input[type="text"],
+    input[type="search"],
+    textarea,
+    select,
+    button:not(.clickable-icon) {
+        transition-duration: 0.01ms;
+    }
 }

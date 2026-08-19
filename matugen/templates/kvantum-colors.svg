@@ -620,11 +620,11 @@
   <g
      id="menu-radio-normal"
      transform="translate(3.8851 30.877)"
-     fill="{{colors.on_surface.default.hex}}fff"
+     fill="{{colors.on_surface.default.hex}}"
      fill-opacity=".99482">
     <path
        d="m30.5 200c-4.4064 0-8 3.5936-8 8s3.5936 8 8 8 8-3.5936 8-8-3.5936-8-8-8zm0 2c3.3257 0 6 2.6743 6 6s-2.6743 6-6 6-6-2.6743-6-6 2.6743-6 6-6z"
-       fill="{{colors.on_surface.default.hex}}fff"
+       fill="{{colors.on_surface.default.hex}}"
        fill-opacity=".99482"
        opacity=".5"
        id="path34" />
@@ -1176,7 +1176,7 @@
      transform="translate(40.735 30.316)">
     <path
        d="m30.5 200c-4.4064 0-8 3.5936-8 8s3.5936 8 8 8 8-3.5936 8-8-3.5936-8-8-8zm0 2c3.3257 0 6 2.6743 6 6s-2.6743 6-6 6-6-2.6743-6-6 2.6743-6 6-6z"
-       fill="{{colors.on_surface.default.hex}}fff"
+       fill="{{colors.on_surface.default.hex}}"
        opacity=".5"
        id="path47" />
   </g>
@@ -1186,7 +1186,7 @@
     <path
        transform="translate(-38)"
        d="m68.5 200c-4.4064 0-8 3.5936-8 8s3.5936 8 8 8 8-3.5936 8-8-3.5936-8-8-8zm0 2c3.3257 0 6 2.6743 6 6s-2.6743 6-6 6-6-2.6743-6-6 2.6743-6 6-6z"
-       fill="{{colors.on_surface.default.hex}}fff"
+       fill="{{colors.on_surface.default.hex}}"
        opacity=".5"
        id="path48" />
   </g>
@@ -3852,14 +3852,14 @@
   <path
      id="menu-normal"
      d="m118 481h48v48h-48z"
-     style="fill:{{colors.surface.default.hex}}" />
+     style="fill:{{colors.surface_container.default.hex}}" />
   <g
      id="menu-normal-left"
      transform="matrix(1.6667 0 0 1 -85.767 -222.75)">
     <path
        d="m116.26 703.75h6v48h-6z"
        id="path232"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-topleft"
@@ -3867,7 +3867,7 @@
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
        id="path233"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-top"
@@ -3875,7 +3875,7 @@
     <path
        d="m116.26 703.75h6v48h-6z"
        id="path234"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-topright"
@@ -3883,7 +3883,7 @@
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
        id="path235"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-right"
@@ -3891,7 +3891,7 @@
     <path
        d="m116.26 703.75h6v48h-6z"
        id="path236"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-bottomright"
@@ -3899,7 +3899,7 @@
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
        id="path237"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-bottom"
@@ -3907,16 +3907,16 @@
     <path
        d="m116.26 703.75h6v48h-6z"
        id="path238"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-normal-bottomleft"
      transform="matrix(0 -1.6667 1.6667 0 -1056.6 732.77)">
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
-       fill="{{colors.surface.default.hex}}"
+       fill="{{colors.surface_container.default.hex}}"
        id="path239"
-       style="fill:{{colors.surface.default.hex}}" />
+       style="fill:{{colors.surface_container.default.hex}}" />
   </g>
   <g
      id="menu-shadow-top"
@@ -3924,7 +3924,7 @@
     <path
        d="m 62.75,875.45933 h 50 v 9.99013 h -50 z"
        id="path240"
-       style="stroke-width:0.755923;fill:{{colors.surface.default.hex}};fill-opacity:1" />
+       style="stroke-width:0.755923;fill:{{colors.surface_container.default.hex}};fill-opacity:1" />
     <rect
        transform="scale(1,-1)"
        x="62.75"
@@ -3944,7 +3944,7 @@
     <path
        d="m 54.743966,883.44 v 50.01 l 9.996025,10e-6 v -50.01 z"
        id="path241"
-       style="fill:{{colors.surface.default.hex}};fill-opacity:1" />
+       style="fill:{{colors.surface_container.default.hex}};fill-opacity:1" />
     <rect
        transform="rotate(90)"
        x="883.44"
@@ -3964,7 +3964,7 @@
     <path
        d="m 112.75,937.45073 h -50 v -9.99985 h 50 z"
        id="path242"
-       style="fill:{{colors.surface.default.hex}};fill-opacity:1" />
+       style="fill:{{colors.surface_container.default.hex}};fill-opacity:1" />
     <rect
        x="62.75"
        y="937.45001"
@@ -3981,7 +3981,8 @@
      y="464"
      width="2"
      height="6.0003"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container.default.hex}}"
+     opacity="0"
      fill-rule="evenodd"
      stroke-width=".69284" />
   <use
@@ -3997,7 +3998,8 @@
      y="91"
      width="2"
      height="6"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container.default.hex}}"
+     opacity="0"
      fill-rule="evenodd"
      stroke-width=".69282" />
   <rect
@@ -4006,7 +4008,8 @@
      y="540"
      width="2"
      height="10"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container.default.hex}}"
+     opacity="0"
      fill-rule="evenodd"
      stroke-width=".89443" />
   <rect
@@ -4016,7 +4019,8 @@
      y="15"
      width="2"
      height="6"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container.default.hex}}"
+     opacity="0"
      fill-rule="evenodd"
      stroke-width=".69282" />
   <g
@@ -4032,7 +4036,7 @@
     <path
        d="m 120.751,885.4503 a 10,10 0 0 0 -10,-10 v 10 z"
        id="path244"
-       style="fill-rule:nonzero;shape-rendering:auto;fill:{{colors.surface.default.hex}};fill-opacity:1" />
+       style="fill-rule:nonzero;shape-rendering:auto;fill:{{colors.surface_container.default.hex}};fill-opacity:1" />
   </g>
   <g
      id="menu-shadow-bottomleft"
@@ -4046,65 +4050,56 @@
     <path
        d="m 120.751,885.4503 a 10,10 0 0 0 -10,-10 v 10 z"
        id="path246"
-       style="fill-rule:nonzero;shape-rendering:auto;fill:{{colors.surface.default.hex}};fill-opacity:1" />
+       style="fill-rule:nonzero;shape-rendering:auto;fill:{{colors.surface_container.default.hex}};fill-opacity:1" />
   </g>
   <path
      id="menuitem-normal-top"
      d="m191 495h8v4h-8z"
-     fill="{{colors.on_surface.default.hex}}"
-     fill-rule="evenodd"
-     opacity=".1" />
+     fill="{{colors.secondary_container.default.hex}}"
+     fill-rule="evenodd" />
   <path
      id="menuitem-normal-bottom"
      d="m191 507h8v4h-8z"
-     fill="{{colors.on_surface.default.hex}}"
-     fill-rule="evenodd"
-     opacity=".1" />
+     fill="{{colors.secondary_container.default.hex}}"
+     fill-rule="evenodd" />
   <path
      id="menuitem-normal"
      d="m191 499h8v8h-8z"
-     fill="{{colors.on_surface.default.hex}}"
-     fill-rule="evenodd"
-     opacity=".1" />
+     fill="{{colors.secondary_container.default.hex}}"
+     fill-rule="evenodd" />
   <path
      id="menuitem-normal-right"
      d="m199 499h4v8h-4z"
-     fill="{{colors.on_surface.default.hex}}"
-     fill-rule="evenodd"
-     opacity=".1" />
+     fill="{{colors.secondary_container.default.hex}}"
+     fill-rule="evenodd" />
   <path
      id="menuitem-normal-left"
      d="m187 499h4v8h-4z"
-     fill="{{colors.on_surface.default.hex}}"
-     fill-rule="evenodd"
-     opacity=".1" />
+     fill="{{colors.secondary_container.default.hex}}"
+     fill-rule="evenodd" />
   <path
      id="menuitem-normal-topleft"
      d="m187 495h4v4h-4z"
-     fill="{{colors.on_surface.default.hex}}"
+     fill="{{colors.secondary_container.default.hex}}"
      fill-rule="evenodd"
-     opacity=".1"
      style="paint-order:normal" />
   <path
      id="menuitem-normal-topright"
      d="m199 495h4v4h-4z"
-     fill="{{colors.on_surface.default.hex}}"
+     fill="{{colors.secondary_container.default.hex}}"
      fill-rule="evenodd"
-     opacity=".1"
      style="paint-order:normal" />
   <path
      id="menuitem-normal-bottomleft"
      d="m187 507h4v4h-4z"
-     fill="{{colors.on_surface.default.hex}}"
+     fill="{{colors.secondary_container.default.hex}}"
      fill-rule="evenodd"
-     opacity=".1"
      style="paint-order:normal" />
   <path
      id="menuitem-normal-bottomright"
      d="m199 507h4v4h-4z"
-     fill="{{colors.on_surface.default.hex}}"
+     fill="{{colors.secondary_container.default.hex}}"
      fill-rule="evenodd"
-     opacity=".1"
      style="paint-order:normal" />
   <path
      id="window-normal"
@@ -4323,13 +4318,13 @@
   <path
      id="tooltip-normal"
      d="m371.77 578.05h48v48h-48z"
-     fill="{{colors.inverse_primary.default.hex}}" />
+     fill="{{colors.surface_container_high.default.hex}}" />
   <g
      id="tooltip-normal-left"
      transform="translate(249.52 -125.7)">
     <path
        d="m116.26 703.75h6v48h-6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path253" />
   </g>
   <g
@@ -4337,7 +4332,7 @@
      transform="translate(249.52 -126.7)">
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path254" />
   </g>
   <g
@@ -4345,7 +4340,7 @@
      transform="rotate(90 333.87 789.67)">
     <path
        d="m116.26 703.75h6v48h-6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path255" />
   </g>
   <g
@@ -4353,7 +4348,7 @@
      transform="rotate(90 334.37 790.17)">
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path256" />
   </g>
   <g
@@ -4361,7 +4356,7 @@
      transform="matrix(-1 0 0 1 542.03 -125.7)">
     <path
        d="m116.26 703.75h6v48h-6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path257" />
   </g>
   <g
@@ -4369,7 +4364,7 @@
      transform="rotate(180 271.02 665.4)">
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path258" />
   </g>
   <g
@@ -4377,7 +4372,7 @@
      transform="rotate(-90 208.17 540.14)">
     <path
        d="m116.26 703.75h6v48h-6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path259" />
   </g>
   <g
@@ -4385,7 +4380,7 @@
      transform="rotate(-90 207.67 540.64)">
     <path
        d="m122.26 698.75c-3.3229 1e-3 -5.9977 2.6768-5.9977 6h6z"
-       fill="{{colors.inverse_primary.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path260" />
   </g>
   <g
@@ -4394,11 +4389,11 @@
      fill-rule="evenodd">
     <g
        transform="matrix(1 0 0 .57142 -127.25 735.45)"
-       fill="{{colors.surface.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="g261">
       <path
          d="m190.36 252.46h50v10.5h-50z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path261" />
     </g>
     <g
@@ -4427,17 +4422,17 @@
       <path
          transform="rotate(-90,33.97,445.97)"
          d="m426 408v7a6 6 0 0 1 6 6h7c-1e-4 -8.0772-4.9229-13-13-13z"
-         color="{{colors.surface.default.hex}}"
+         color="{{colors.surface_container_high.default.hex}}"
          color-rendering="auto"
          fill="url(#radialGradient4124)"
          image-rendering="auto"
          opacity=".01"
-         solid-color="{{colors.surface.default.hex}}"
+         solid-color="{{colors.surface_container_high.default.hex}}"
          style="isolation:auto;mix-blend-mode:normal"
          id="path262" />
       <path
          d="m9.0003 47.939a6 6 0 0 0-6 6h6z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path263" />
     </g>
   </g>
@@ -4447,11 +4442,11 @@
      fill-rule="evenodd">
     <g
        transform="matrix(.57143 0 0 1 -24.393 624.45)"
-       fill="{{colors.surface.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="g264">
       <path
          d="m246.98 259v50l-10.5 1e-5v-50z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path264" />
     </g>
     <g
@@ -4474,11 +4469,11 @@
      fill-rule="evenodd">
     <g
        transform="matrix(.57143 0 0 1 -45.822 624.45)"
-       fill="{{colors.surface.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="g266">
       <path
          d="m182.98 259v50l10.5 1e-5v-50z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path265" />
     </g>
     <g
@@ -4501,11 +4496,11 @@
      fill-rule="evenodd">
     <g
        transform="matrix(-1 0 0 -.57142 302.75 1081.5)"
-       fill="{{colors.surface.default.hex}}"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="g268">
       <path
          d="m190.01 252.09h50v10.5h-50z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path267" />
     </g>
     <g
@@ -4528,7 +4523,8 @@
      y="562.99"
      width="2.5"
      height="7"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container_high.default.hex}}"
+     opacity="0"
      fill-rule="evenodd" />
   <rect
      id="tooltip-shadow-hint-right"
@@ -4537,7 +4533,8 @@
      y="332.99"
      width="2.5"
      height="7"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container_high.default.hex}}"
+     opacity="0"
      fill-rule="evenodd" />
   <rect
      id="tooltip-shadow-hint-bottom"
@@ -4545,7 +4542,8 @@
      y="631.99"
      width="2.5"
      height="7"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container_high.default.hex}}"
+     opacity="0"
      fill-rule="evenodd" />
   <rect
      id="tooltip-shadow-hint-left"
@@ -4554,7 +4552,8 @@
      y="263.99"
      width="2.5"
      height="6.9999"
-     fill="{{colors.primary.default.hex}}"
+     fill="{{colors.surface_container_high.default.hex}}"
+     opacity="0"
      fill-rule="evenodd" />
   <g
      id="tooltip-shadow-topleft"
@@ -4578,7 +4577,7 @@
          id="path269" />
       <path
          d="m9.0003 47.939a6 6 0 0 0-6 6h6z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path270" />
     </g>
   </g>
@@ -4604,7 +4603,7 @@
          id="path271" />
       <path
          d="m9.0003 47.939a6 6 0 0 0-6 6h6z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path272" />
     </g>
   </g>
@@ -4630,7 +4629,7 @@
          id="path273" />
       <path
          d="m9.0003 47.939a6 6 0 0 0-6 6h6z"
-         fill="{{colors.surface.default.hex}}"
+         fill="{{colors.surface_container_high.default.hex}}"
          id="path274" />
     </g>
   </g>
@@ -4640,7 +4639,7 @@
      d="m367.5 22.5v36h48v-36z"
      color="{{colors.primary.default.hex}}"
      fill="{{colors.on_surface.default.hex}}"
-     opacity=".15"
+     opacity=".06"
      stroke-width=".86602" />
   <g
      id="lineedit-focused-topleft"
@@ -4649,7 +4648,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        stroke-width="1.25"
        id="path275" />
     <path
@@ -4675,7 +4674,7 @@
        d="m190.14 825.86v4h131v-4z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        id="path278" />
     <path
        class="ColorScheme-Highlight"
@@ -4699,7 +4698,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        stroke-width="1.25"
        id="path281" />
     <path
@@ -4725,7 +4724,7 @@
        d="m190.14 825.86v4h131v-4z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        id="path284" />
     <path
        class="ColorScheme-Highlight"
@@ -4750,7 +4749,7 @@
        d="m190.14 825.86v4h131v-4z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        id="path287" />
     <path
        class="ColorScheme-Highlight"
@@ -4775,7 +4774,7 @@
        d="m190.14 825.86v4h131v-4z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        id="path290" />
     <path
        class="ColorScheme-Highlight"
@@ -4799,7 +4798,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        stroke-width="1.25"
        id="path293" />
     <path
@@ -4824,7 +4823,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       opacity=".06"
        stroke-width="1.25"
        id="path296" />
     <path
@@ -4847,8 +4846,7 @@
      class="ColorScheme-Highlight"
      d="m291.5 22.5v36h48v-36z"
      color="{{colors.primary.default.hex}}"
-     fill="{{colors.on_surface.default.hex}}"
-     opacity=".1"
+     fill="{{colors.outline_variant.default.hex}}"
      stroke-width=".86602" />
   <g
      id="lineedit-normal-topleft"
@@ -4856,8 +4854,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path299" />
     <path
@@ -4882,8 +4879,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path302" />
     <path
@@ -4907,8 +4903,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path305" />
     <path
@@ -4933,8 +4928,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path308" />
     <path
@@ -4959,8 +4953,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path311" />
     <path
@@ -4985,8 +4978,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5h131v-5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path314" />
     <path
@@ -5010,8 +5002,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path317" />
     <path
@@ -5035,8 +5026,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path320" />
     <path
@@ -5060,7 +5050,7 @@
      d="m369.05 94.755v36h48v-36z"
      color="{{colors.primary.default.hex}}"
      fill="{{colors.on_surface.default.hex}}"
-     opacity=".1"
+     opacity=".06"
      stroke-width=".86603" />
   <g
      id="combo-focused-topleft"
@@ -5069,7 +5059,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.25"
        id="path323" />
     <path
@@ -5083,8 +5073,7 @@
        transform="translate(81.14,758.86)"
        d="m109 66c-2.77 0-5 2.23-5 5h2c0-1.662 1.338-3 3-3z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width="1.25"
        id="path325" />
   </g>
@@ -5096,7 +5085,7 @@
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.118"
        id="path326" />
     <path
@@ -5110,8 +5099,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v2h131v-2z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width=".70711"
        id="path328" />
   </g>
@@ -5122,7 +5110,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.25"
        id="path329" />
     <path
@@ -5136,8 +5124,7 @@
        transform="translate(81.14,758.86)"
        d="m109 66c-2.77 0-5 2.23-5 5h2c0-1.662 1.338-3 3-3z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width="1.25"
        id="path331" />
   </g>
@@ -5149,7 +5136,7 @@
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.118"
        id="path332" />
     <path
@@ -5163,8 +5150,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v2h131v-2z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width=".70711"
        id="path334" />
   </g>
@@ -5176,7 +5162,7 @@
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.118"
        id="path335" />
     <path
@@ -5190,8 +5176,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v2h131v-2z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width=".70711"
        id="path337" />
   </g>
@@ -5203,7 +5188,7 @@
        d="m190.14 824.86v5h131v-5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.118"
        id="path338" />
     <path
@@ -5217,8 +5202,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v2h131v-2z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width=".70711"
        id="path340" />
   </g>
@@ -5229,7 +5213,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.25"
        id="path341" />
     <path
@@ -5243,8 +5227,7 @@
        transform="translate(81.14,758.86)"
        d="m109 66c-2.77 0-5 2.23-5 5h2c0-1.662 1.338-3 3-3z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width="1.25"
        id="path343" />
   </g>
@@ -5255,7 +5238,7 @@
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".06"
        stroke-width="1.25"
        id="path344" />
     <path
@@ -5269,8 +5252,7 @@
        transform="translate(81.14,758.86)"
        d="m109 66c-2.77 0-5 2.23-5 5h2c0-1.662 1.338-3 3-3z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.primary.default.hex}}"
        stroke-width="1.25"
        id="path346" />
   </g>
@@ -5279,8 +5261,7 @@
      class="ColorScheme-Highlight"
      d="m292.05 94.755v36h48v-36z"
      color="{{colors.primary.default.hex}}"
-     fill="{{colors.on_surface.default.hex}}"
-     opacity=".1"
+     fill="{{colors.outline_variant.default.hex}}"
      stroke-width=".86603" />
   <g
      id="combo-normal-topleft"
@@ -5288,8 +5269,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path347" />
     <path
@@ -5314,8 +5294,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path350" />
     <path
@@ -5339,8 +5318,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path353" />
     <path
@@ -5365,8 +5343,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path356" />
     <path
@@ -5391,8 +5368,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5.0001h131v-5.0001z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path359" />
     <path
@@ -5417,8 +5393,7 @@
        class="ColorScheme-Highlight"
        d="m190.14 824.86v5h131v-5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.118"
        id="path362" />
     <path
@@ -5442,8 +5417,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path365" />
     <path
@@ -5467,8 +5441,7 @@
     <path
        d="m190.14 824.86c-2.77 0-5 2.23-5 5h5z"
        color="{{colors.primary.default.hex}}"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       fill="{{colors.outline_variant.default.hex}}"
        stroke-width="1.25"
        id="path368" />
     <path
@@ -5500,7 +5473,7 @@
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        style="paint-order:markers stroke fill"
        id="path371" />
   </g>
@@ -5513,7 +5486,7 @@
        width="26"
        height="6"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        style="paint-order:markers stroke fill"
        id="rect371" />
   </g>
@@ -5526,7 +5499,7 @@
        width="26"
        height="26"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        style="paint-order:markers stroke fill"
        id="rect372" />
   </g>
@@ -5580,7 +5553,7 @@
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".12"
        style="paint-order:markers stroke fill"
        id="path373" />
   </g>
@@ -5593,7 +5566,7 @@
        width="26"
        height="6"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".12"
        style="paint-order:markers stroke fill"
        id="rect374" />
   </g>
@@ -5606,7 +5579,7 @@
        width="26"
        height="26"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".12"
        style="paint-order:markers stroke fill"
        id="rect375" />
   </g>
@@ -5660,7 +5633,7 @@
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".25"
+       opacity=".16"
        style="paint-order:markers stroke fill"
        id="path376" />
   </g>
@@ -5673,7 +5646,7 @@
        width="26"
        height="6"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".25"
+       opacity=".16"
        style="paint-order:markers stroke fill"
        id="rect377" />
   </g>
@@ -5686,7 +5659,7 @@
        width="26"
        height="26"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".25"
+       opacity=".16"
        style="paint-order:markers stroke fill"
        id="rect378" />
   </g>
@@ -5739,7 +5712,7 @@
        id="rect379" />
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
-       fill="{{colors.primary.default.hex}}"
+       fill="{{colors.secondary_container.default.hex}}"
        style="paint-order:markers stroke fill"
        id="path379" />
   </g>
@@ -5751,7 +5724,7 @@
        y="-80"
        width="26"
        height="6"
-       fill="{{colors.primary.default.hex}}"
+       fill="{{colors.secondary_container.default.hex}}"
        style="paint-order:markers stroke fill"
        id="rect380" />
   </g>
@@ -5763,7 +5736,7 @@
        y="-74"
        width="26"
        height="26"
-       fill="{{colors.primary.default.hex}}"
+       fill="{{colors.secondary_container.default.hex}}"
        style="paint-order:markers stroke fill"
        id="rect381" />
   </g>
@@ -5820,7 +5793,7 @@
        transform="scale(.26458)"
        d="m92 60c-6.648 0-12 5.352-12 12h12z"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        stroke-width=".50676"
        style="paint-order:markers stroke fill"
        id="path382" />
@@ -5834,7 +5807,7 @@
        width="3.175"
        height="3.175"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        stroke-linecap="square"
        stroke-width=".2542"
        style="paint-order:markers stroke fill"
@@ -5876,8 +5849,7 @@
        id="rect384" />
     <path
        d="m24.342 15.875c-1.7589 0-3.175 1.416-3.175 3.175h3.175z"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       fill="{{colors.secondary_container.default.hex}}"
        stroke-width=".26458"
        id="path384" />
   </g>
@@ -5889,8 +5861,7 @@
        y="15.875"
        width="3.175"
        height="3.175"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       fill="{{colors.secondary_container.default.hex}}"
        id="rect385" />
   </g>
   <use
@@ -5930,7 +5901,7 @@
     <path
        d="m24.342 15.875c-1.7589 0-3.175 1.416-3.175 3.175h3.175z"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".16"
        stroke-width=".26458"
        id="path386" />
   </g>
@@ -5943,7 +5914,7 @@
        width="3.175"
        height="3.175"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".16"
        id="rect387" />
   </g>
   <use
@@ -5979,7 +5950,7 @@
        width="16"
        height="1"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        style="paint-order:markers stroke fill"
        id="rect388" />
   </g>
@@ -5992,7 +5963,7 @@
        width="16"
        height="1"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".1"
+       opacity=".08"
        style="paint-order:markers stroke fill"
        id="rect389" />
   </g>
@@ -6011,7 +5982,7 @@
        width="16"
        height="1"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".16"
        style="paint-order:markers stroke fill"
        id="rect390" />
   </g>
@@ -6024,7 +5995,7 @@
        width="16"
        height="1"
        fill="{{colors.on_surface.default.hex}}"
-       opacity=".2"
+       opacity=".16"
        style="paint-order:markers stroke fill"
        id="rect391" />
   </g>
@@ -6042,8 +6013,7 @@
        y="-35"
        width="16"
        height="1"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       fill="{{colors.secondary_container.default.hex}}"
        style="paint-order:markers stroke fill"
        id="rect392" />
   </g>
@@ -6055,8 +6025,7 @@
        y="-35"
        width="16"
        height="1"
-       fill="{{colors.on_surface.default.hex}}"
-       opacity=".15"
+       fill="{{colors.secondary_container.default.hex}}"
        style="paint-order:markers stroke fill"
        id="rect393" />
   </g>
@@ -6184,8 +6153,7 @@
        id="path393" />
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="path394" />
     <rect
        x="-5"
@@ -6197,7 +6165,8 @@
     <path
        transform="translate(121,-688)"
        d="m-120 608c-3.324 0-6 2.676-6 6h1c0-2.77 2.23-5 5-5z"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        style="paint-order:markers stroke fill"
        id="path395" />
   </g>
@@ -6217,8 +6186,7 @@
        y="-80.667"
        width="26"
        height="6.6668"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        stroke-width="1.0541"
        id="rect396" />
     <rect
@@ -6226,7 +6194,8 @@
        y="-80.667"
        width="26"
        height="1.1111"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        stroke-width="1.0541"
        id="rect397" />
   </g>
@@ -6238,8 +6207,7 @@
        y="-74"
        width="26"
        height="26"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect398" />
   </g>
   <use
@@ -6256,15 +6224,15 @@
        y="-80"
        width="26"
        height="6"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect399" />
     <rect
        x="1"
        y="-80"
        width="26"
        height="1"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        id="rect400" />
   </g>
   <g
@@ -6275,15 +6243,15 @@
        y="-80"
        width="26"
        height="6"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect401" />
     <rect
        x="1"
        y="-80"
        width="26"
        height="1"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        id="rect402" />
   </g>
   <g
@@ -6294,15 +6262,15 @@
        y="-80"
        width="26"
        height="6"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect403" />
     <rect
        x="1"
        y="-80"
        width="26"
        height="1"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        id="rect404" />
   </g>
   <g
@@ -6313,15 +6281,15 @@
        y="-80"
        width="26"
        height="6"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect405" />
     <rect
        x="1"
        y="-80"
        width="26"
        height="1"
-       opacity=".36"
+       fill="{{colors.outline_variant.default.hex}}"
+       opacity=".35"
        id="rect406" />
   </g>
   <g
@@ -6332,8 +6300,7 @@
        y="-74"
        width="26"
        height="26"
-       fill="{{colors.surface.default.hex}}"
-       opacity=".8"
+       fill="{{colors.surface_container_high.default.hex}}"
        id="rect407" />
   </g>
   <g
@@ -6347,7 +6314,8 @@
        id="path407" />
     <path
        d="m1-80c-3.324 0-6 2.676-6 6h6z"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="path408" />
     <rect
        x="-5"
@@ -6374,7 +6342,8 @@
        y="-80"
        width="26"
        height="6"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect410" />
   </g>
   <g
@@ -6385,7 +6354,8 @@
        y="-74"
        width="26"
        height="26"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect411" />
   </g>
   <use
@@ -6402,7 +6372,8 @@
        y="-80"
        width="26"
        height="6"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect412" />
   </g>
   <g
@@ -6413,7 +6384,8 @@
        y="-80"
        width="26"
        height="6"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect413" />
   </g>
   <g
@@ -6424,7 +6396,8 @@
        y="-80"
        width="26"
        height="6"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect414" />
   </g>
   <g
@@ -6435,7 +6408,8 @@
        y="-80"
        width="26"
        height="6"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect415" />
   </g>
   <g
@@ -6446,7 +6420,8 @@
        y="-74"
        width="26"
        height="26"
-       opacity=".25"
+       fill="{{colors.on_surface.default.hex}}"
+       opacity=".12"
        id="rect416" />
   </g>
   <g
@@ -6709,17 +6684,17 @@
   <path
      id="checkbox-normal"
      d="m223.9 230.53a8 8 0 0 0-8 8 8 8 0 0 0 8 8 8 8 0 0 0 8-8 8 8 0 0 0-8-8zm0 2a6 6 0 0 1 6 6 6 6 0 0 1-6 6 6 6 0 0 1-6-6 6 6 0 0 1 6-6z"
-     fill="{{colors.on_surface.default.hex}}fff"
+     fill="{{colors.on_surface.default.hex}}"
      opacity=".5" />
   <path
      id="checkbox-focused"
      d="m260.94 229.88a8 8 0 0 0-8 8 8 8 0 0 0 8 8 8 8 0 0 0 8-8 8 8 0 0 0-8-8zm0 2a6 6 0 0 1 6 6 6 6 0 0 1-6 6 6 6 0 0 1-6-6 6 6 0 0 1 6-6z"
-     fill="{{colors.on_surface.default.hex}}fff"
+     fill="{{colors.on_surface.default.hex}}"
      opacity=".5" />
   <path
      id="menu-checkbox-normal"
      d="m193.42 230.26a8 8 0 0 0-8 8 8 8 0 0 0 8 8 8 8 0 0 0 8-8 8 8 0 0 0-8-8zm0 2a6 6 0 0 1 6 6 6 6 0 0 1-6 6 6 6 0 0 1-6-6 6 6 0 0 1 6-6z"
-     fill="{{colors.on_surface.default.hex}}fff"
+     fill="{{colors.on_surface.default.hex}}"
      opacity=".5" />
   <path
      id="checkbox-checked-focused"
