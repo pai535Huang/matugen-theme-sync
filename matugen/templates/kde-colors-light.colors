@@ -33,18 +33,18 @@ ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Complementary]
-BackgroundAlternate={{colors.surface_container_low.light.hex}}
-BackgroundNormal={{colors.surface.light.hex}}
-DecorationFocus={{colors.primary.light.hex}}
-DecorationHover={{colors.primary.light.hex}}
-ForegroundActive={{colors.primary.light.hex}}
-ForegroundInactive={{colors.on_surface_variant.light.hex}}
-ForegroundLink={{colors.secondary.light.hex}}
-ForegroundNegative={{colors.error.light.hex}}
-ForegroundNeutral={{colors.tertiary.light.hex}}
-ForegroundNormal={{colors.on_surface.light.hex}}
-ForegroundPositive={{colors.secondary.light.hex}}
-ForegroundVisited={{colors.on_secondary_container.light.hex}}
+BackgroundAlternate={{colors.surface_container_low.dark.hex}}
+BackgroundNormal={{colors.surface.dark.hex}}
+DecorationFocus={{colors.primary.dark.hex}}
+DecorationHover={{colors.primary.dark.hex}}
+ForegroundActive={{colors.primary.dark.hex}}
+ForegroundInactive={{colors.on_surface_variant.dark.hex}}
+ForegroundLink={{colors.secondary.dark.hex}}
+ForegroundNegative={{colors.error.dark.hex}}
+ForegroundNeutral={{colors.tertiary.dark.hex}}
+ForegroundNormal={{colors.on_surface.dark.hex}}
+ForegroundPositive={{colors.tertiary_fixed.dark.hex}}
+ForegroundVisited={{colors.on_secondary_container.dark.hex}}
 
 [Colors:Header]
 BackgroundAlternate={{colors.surface.light.hex}}

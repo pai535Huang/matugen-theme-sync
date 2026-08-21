@@ -42,7 +42,7 @@ ForegroundInactive={{colors.on_surface_variant.dark.hex}}
 ForegroundLink={{colors.secondary.dark.hex}}
 ForegroundNegative={{colors.error.dark.hex}}
 ForegroundNeutral={{colors.tertiary.dark.hex}}
-ForegroundNormal={{colors.on_primary_container.dark.hex}}
+ForegroundNormal={{colors.on_surface.dark.hex}}
 ForegroundPositive={{colors.tertiary_fixed.dark.hex}}
 ForegroundVisited={{colors.on_secondary_container.dark.hex}}
 
