@@ -76,7 +76,3 @@ output_path = "~/.config/qt6ct/colors/matugen.conf"
 input_path = "~/.config/matugen/templates/pywalfox-colors.json"
 output_path = "~/.cache/wal/colors.json"
 post_hook = "pywalfox update >/dev/null 2>&1 || true"
-
-[templates.kde_color_scheme]
-input_path = "~/.config/matugen/templates/kde-colors.colors"
-output_path = "~/.local/share/color-schemes/Matugen.colors"
