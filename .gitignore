@@ -10,4 +10,8 @@ __pycache__/
 *~
 
 # AI session exports (kept local only)
-docs/
+docs/conversation.md
+docs/opencode-session.json
+
+# AI agent plans and specs
+docs/superpowers/
