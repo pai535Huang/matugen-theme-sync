@@ -53,7 +53,7 @@
     --background-modifier-hover:          color-mix(in oklch, var(--mat-on-surface) 7%, transparent);
     --background-modifier-active-hover:   var(--mat-secondary-container);
     --background-modifier-form-field:     var(--mat-surface-container-low);
-    --background-modifier-message:        var(--mat-surface-container-high);
+    --background-modifier-message:        {{colors.inverse_surface.default.hex}};
     --background-modifier-success:        {{colors.tertiary_container.default.hex}};
     --background-modifier-error:          {{colors.error_container.default.hex}};
     --background-modifier-error-hover:    {{colors.error.default.hex}};
@@ -196,6 +196,25 @@
     border: 1px solid var(--mat-outline-variant);
     border-radius: 12px;
     box-shadow: 0 12px 32px color-mix(in oklch, black 22%, transparent);
+}
+
+/* ── Tooltips, Notices & Status Messages ──────────────────── */
+/* Obsidian hardcodes near-white text on these surfaces (#FAFAFA on
+   .tooltip/.notice, var(--text-on-accent) on the mod-error/mod-success
+   variants), so pair each surface with its material on-color for
+   readable contrast in both themes. */
+.tooltip,
+.notice {
+    color: {{colors.inverse_on_surface.default.hex}};
+}
+
+.tooltip.mod-error,
+.message.mod-error {
+    color: {{colors.on_error_container.default.hex}};
+}
+
+.message.mod-success {
+    color: {{colors.on_tertiary_container.default.hex}};
 }
 
 /* ── Controls ─────────────────────────────────────────────── */
