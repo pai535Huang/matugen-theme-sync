@@ -75,18 +75,25 @@ ForegroundPositive={{colors.secondary.light.hex}}
 ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Selection]
+# Dolphin (26.08) paints selected item text with QPalette::Text
+# (KStandardItemListWidget::textColor), not HighlightedText, so the selection
+# background must stay readable with the view's normal foreground: in light
+# mode it has to be a LIGHT surface. primary_container.light is not
+# guaranteed light (matugen renders it dark for some wallpapers), so use the
+# fixed tones, which are always light, and pair every foreground with the
+# light-variant on-color.
 BackgroundAlternate={{colors.surface_container_low.light.hex}}
-BackgroundNormal={{colors.primary_container.light.hex}}
+BackgroundNormal={{colors.primary_fixed.light.hex}}
 DecorationFocus={{colors.primary.light.hex}}
 DecorationHover={{colors.primary.light.hex}}
-ForegroundActive={{colors.on_primary_container.dark.hex}}
-ForegroundInactive={{colors.on_surface_variant.dark.hex}}
-ForegroundLink={{colors.secondary_fixed.dark.hex}}
-ForegroundNegative={{colors.on_error_container.dark.hex}}
-ForegroundNeutral={{colors.tertiary_fixed_dim.dark.hex}}
-ForegroundNormal={{colors.on_primary_container.dark.hex}}
-ForegroundPositive={{colors.on_tertiary_container.dark.hex}}
-ForegroundVisited={{colors.on_secondary_container.dark.hex}}
+ForegroundActive={{colors.primary.light.hex}}
+ForegroundInactive={{colors.on_surface_variant.light.hex}}
+ForegroundLink={{colors.on_primary_fixed_variant.light.hex}}
+ForegroundNegative={{colors.on_error_container.light.hex}}
+ForegroundNeutral={{colors.on_tertiary_fixed.light.hex}}
+ForegroundNormal={{colors.on_primary_fixed.light.hex}}
+ForegroundPositive={{colors.on_secondary_fixed.light.hex}}
+ForegroundVisited={{colors.on_secondary_container.light.hex}}
 
 [Colors:Tooltip]
 BackgroundAlternate={{colors.surface.light.hex}}
@@ -105,8 +112,14 @@ ForegroundVisited={{colors.on_secondary_container.light.hex}}
 [Colors:View]
 BackgroundAlternate={{colors.surface_container.light.hex}}
 BackgroundNormal={{colors.background.light.hex}}
-DecorationFocus={{colors.primary_container.light.hex}}
-DecorationHover={{colors.on_primary.light.hex}}
+# Darkly draws focused buttons (the default "OK" button) with
+# KColorScheme View FocusColor as the background and the selection
+# ForegroundNormal (HighlightedText) as the text.  DecorationFocus must
+# therefore stay readable with the dark HighlightedText while remaining
+# visible as a focus ring on light surfaces; the mid-tone outline color
+# satisfies both (primary_container.light is too dark for it).
+DecorationFocus={{colors.outline.light.hex}}
+DecorationHover={{colors.outline.light.hex}}
 ForegroundActive={{colors.primary.light.hex}}
 ForegroundInactive={{colors.on_surface_variant.light.hex}}
 ForegroundLink={{colors.secondary.light.hex}}

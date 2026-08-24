@@ -84,6 +84,72 @@ class KdeColorsTemplateTest(unittest.TestCase):
             variant(DARK, "Colors:View", "ForegroundNormal"), "dark"
         )
 
+    def test_light_selection_is_light_surface_with_light_on_colors(self) -> None:
+        # Dolphin 26.08 paints selected item text with QPalette::Text
+        # (KStandardItemListWidget::textColor), which follows
+        # Colors:View.ForegroundNormal, not the selection foreground. A dark
+        # selection surface therefore renders dark-on-dark. In light mode the
+        # selection background must be a guaranteed-light token and every
+        # foreground must be a light-variant on-color.
+        section = parse(LIGHT)["Colors:Selection"]
+        self.assertEqual(
+            section["BackgroundNormal"], "{{colors.primary_fixed.light.hex}}"
+        )
+        self.assertEqual(
+            section["ForegroundNormal"],
+            "{{colors.on_primary_fixed.light.hex}}",
+        )
+        for key in section:
+            if key.startswith("Foreground"):
+                self.assertEqual(
+                    variant(LIGHT, "Colors:Selection", key), "light",
+                    f"Colors:Selection.{key} must use a light-variant token",
+                )
+
+    def test_dark_selection_uses_dark_variants(self) -> None:
+        # The dark selection stays dark so that both QPalette::Text (light in
+        # dark mode) and HighlightedText stay readable on it.
+        section = parse(DARK)["Colors:Selection"]
+        self.assertEqual(
+            section["BackgroundNormal"],
+            "{{colors.primary_container.dark.hex}}",
+        )
+        self.assertEqual(
+            section["ForegroundNormal"],
+            "{{colors.on_primary_container.dark.hex}}",
+        )
+        for key in section:
+            self.assertEqual(
+                variant(DARK, "Colors:Selection", key), "dark",
+                f"Colors:Selection.{key} must use a dark-variant token",
+            )
+
+    def test_view_focus_keeps_highlighted_text_readable(self) -> None:
+        # Darkly paints focused buttons (the default dialog button) with
+        # KColorScheme View FocusColor as background and HighlightedText as
+        # text, and uses Highlight/HighlightedText for view focus lines.  The
+        # focus decoration must therefore be a mid tone that contrasts with
+        # the scheme's HighlightedText: outline in light mode (dark
+        # HighlightedText) and inverse primary in dark mode (light
+        # HighlightedText).  primary_container / primary are the wrong
+        # polarity in each mode.
+        self.assertEqual(
+            parse(LIGHT)["Colors:View"]["DecorationFocus"],
+            "{{colors.outline.light.hex}}",
+        )
+        self.assertEqual(
+            parse(LIGHT)["Colors:View"]["DecorationHover"],
+            "{{colors.outline.light.hex}}",
+        )
+        self.assertEqual(
+            parse(DARK)["Colors:View"]["DecorationFocus"],
+            "{{colors.inverse_primary.dark.hex}}",
+        )
+        self.assertEqual(
+            parse(DARK)["Colors:View"]["DecorationHover"],
+            "{{colors.inverse_primary.dark.hex}}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
