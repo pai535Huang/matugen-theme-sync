@@ -105,8 +105,14 @@ ForegroundVisited={{colors.on_secondary_container.dark.hex}}
 [Colors:View]
 BackgroundAlternate={{colors.surface_container.dark.hex}}
 BackgroundNormal={{colors.background.dark.hex}}
-DecorationFocus={{colors.primary_container.dark.hex}}
-DecorationHover={{colors.on_primary.dark.hex}}
+# Darkly draws focused buttons (the default "OK" button) with
+# KColorScheme View FocusColor as the background and the selection
+# ForegroundNormal (HighlightedText) as the text.  DecorationFocus must
+# therefore stay readable with the light HighlightedText while remaining
+# visible as a focus ring on dark surfaces; the mid-tone inverse primary
+# satisfies both (primary.dark is too light for it).
+DecorationFocus={{colors.inverse_primary.dark.hex}}
+DecorationHover={{colors.inverse_primary.dark.hex}}
 ForegroundActive={{colors.primary.dark.hex}}
 ForegroundInactive={{colors.on_surface_variant.dark.hex}}
 ForegroundLink={{colors.secondary.dark.hex}}
