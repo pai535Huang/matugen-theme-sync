@@ -27,7 +27,8 @@ input_path_modes = { light = "~/.config/matugen/templates/kitty-colors-light.con
 output_path = "~/.config/kitty/themes/Matugen.conf"
 
 [templates.nvim]
-input_path = "~/.config/matugen/templates/nvim-colors.vim"
+input_path = "~/.config/matugen/templates/nvim-colors-dark.vim"
+input_path_modes = { light = "~/.config/matugen/templates/nvim-colors-light.vim", dark = "~/.config/matugen/templates/nvim-colors-dark.vim" }
 output_path = "~/.config/nvim/colors/matugen.vim"
 
 [templates.btop]

@@ -17,4 +17,4 @@ hi Statement guibg=None guifg={{ base16.base0e.default.hex }}
 hi Error guibg={{ colors.error_container.default.hex }} guifg={{ colors.on_error_container.default.hex }}
 hi StatusLine guibg={{ colors.primary.default.hex }} guifg={{ colors.on_primary.default.hex }}
 hi StatusLineNC guibg={{ colors.primary_container.default.hex }} guifg={{ colors.on_primary_container.default.hex }}
-hi Selection guibg={{ base16.base02.default.hex }}
+hi Selection guibg={{ colors.secondary_container.default.hex }} guifg={{ colors.on_secondary_container.default.hex }}
