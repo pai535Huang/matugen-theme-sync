@@ -212,6 +212,29 @@ class NiriIntegrationTests(unittest.TestCase):
         self.manager.rollback()
         self.assertEqual(stat.S_IMODE(style.stat().st_mode), 0o600)
 
+    def test_retry_records_deleted_original_before_recreating_static_target(self):
+        style = self.write(".config/waybar/style.css", "immutable-original\n")
+        os.chmod(style, 0o640)
+        self.manager.begin()
+        self.manager.deploy_static()
+        self.manager.rollback()
+        style.unlink()
+
+        self.manager.begin()
+        self.manager.deploy_static()
+
+        absent = self.state / (
+            "matugen-theme-sync/niri/conflicts/20260901T120000/"
+            "waybar-style.absent"
+        )
+        self.assertEqual(absent.read_bytes(), b"")
+        self.assertEqual(stat.S_IMODE(absent.stat().st_mode), 0o644)
+        self.manager.commit()
+        self.manager.restore()
+        self.assertEqual(style.read_text(encoding="utf-8"), "immutable-original\n")
+        self.assertEqual(stat.S_IMODE(style.stat().st_mode), 0o640)
+        self.assertEqual(absent.read_bytes(), b"")
+
     def test_begin_finalizes_commit_interrupted_before_manifest_write(self):
         style = self.write(".config/waybar/style.css", "original\n")
         self.manager.begin()
@@ -247,17 +270,21 @@ class NiriIntegrationTests(unittest.TestCase):
         recovered.rollback()
         self.assertEqual(style.read_bytes(), deployed)
 
-    def test_begin_finalizes_commit_interrupted_before_transaction_cleanup(self):
+    def interrupt_commit_during_partial_cleanup(self):
         style = self.write(".config/waybar/style.css", "original\n")
         self.manager.begin()
         self.manager.deploy_static()
         deployed = style.read_bytes()
         expected_checksum = hashlib.sha256(deployed).hexdigest()
+        transactions = self.manager.root / "transactions"
+        cleanup = transactions / "committed-cleanup"
+        journal = transactions / "committed-manifest.json"
         real_rmtree = MODULE.shutil.rmtree
 
         def fail_transaction_cleanup(path, *args, **kwargs):
-            if Path(path) == self.manager.transaction:
-                raise OSError("injected transaction cleanup failure")
+            if Path(path) == cleanup:
+                (cleanup / "waybar-style").unlink()
+                raise OSError("injected partial transaction cleanup failure")
             return real_rmtree(path, *args, **kwargs)
 
         with patch.object(
@@ -265,6 +292,24 @@ class NiriIntegrationTests(unittest.TestCase):
         ):
             with self.assertRaises(OSError):
                 self.manager.commit()
+
+        return style, deployed, expected_checksum, cleanup, journal
+
+    def test_partial_commit_cleanup_keeps_journal_until_cleanup_succeeds(self):
+        style, deployed, _, cleanup, journal = (
+            self.interrupt_commit_during_partial_cleanup()
+        )
+
+        self.assertEqual(style.read_bytes(), deployed)
+        self.assertTrue(cleanup.is_dir())
+        self.assertFalse((cleanup / "waybar-style").exists())
+        self.assertTrue(journal.is_file())
+        self.assertFalse(self.manager.transaction.exists())
+
+    def test_begin_converges_after_partial_committed_cleanup(self):
+        style, deployed, expected_checksum, cleanup, journal = (
+            self.interrupt_commit_during_partial_cleanup()
+        )
 
         recovered = MODULE.NiriIntegration(
             self.home,
@@ -280,6 +325,8 @@ class NiriIntegrationTests(unittest.TestCase):
             manifest["targets"]["waybar-style"]["deployed_checksum"],
             expected_checksum,
         )
+        self.assertFalse(cleanup.exists())
+        self.assertFalse(journal.exists())
         style.write_text("next-operation-change\n", encoding="utf-8")
         recovered.rollback()
         self.assertEqual(style.read_bytes(), deployed)
@@ -325,6 +372,16 @@ class NiriIntegrationTests(unittest.TestCase):
         self.assertEqual(
             (external / "style.css").read_text(encoding="utf-8"), "external\n"
         )
+        self.assertFalse(self.manager.root.exists())
+
+    def test_begin_rejects_non_regular_target_without_mutating_it(self):
+        niri = self.home / ".config/niri/config.kdl"
+        niri.mkdir(parents=True)
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.begin()
+
+        self.assertTrue(niri.is_dir())
         self.assertFalse(self.manager.root.exists())
 
     def test_generated_files_are_restored_without_conflict_archives(self):

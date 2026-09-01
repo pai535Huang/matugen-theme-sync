@@ -102,7 +102,11 @@ class NiriIntegration:
 
     @property
     def committed_manifest_path(self) -> Path:
-        return self.transaction / "committed-manifest.json"
+        return self.root / "transactions/committed-manifest.json"
+
+    @property
+    def committed_cleanup_path(self) -> Path:
+        return self.root / "transactions/committed-cleanup"
 
     @staticmethod
     def _sha256(path: Path) -> str:
@@ -225,18 +229,32 @@ class NiriIntegration:
     def _finalize_committed_transaction(self) -> None:
         manifest = self._read_manifest(self.committed_manifest_path)
         self._write_manifest(manifest)
-        shutil.rmtree(self.transaction)
+        if self.committed_cleanup_path.exists():
+            if not self.committed_cleanup_path.is_dir():
+                raise IntegrationError("committed cleanup path is not a directory")
+            shutil.rmtree(self.committed_cleanup_path)
+        if self.transaction.exists():
+            if not self.transaction.is_dir():
+                raise IntegrationError("transaction path is not a directory")
+            os.replace(self.transaction, self.committed_cleanup_path)
+        if self.committed_cleanup_path.exists():
+            shutil.rmtree(self.committed_cleanup_path)
+        self.committed_manifest_path.unlink()
 
     def _recover_transaction(self) -> None:
+        if self.committed_manifest_path.is_file():
+            self._finalize_committed_transaction()
+            return
+        if self.committed_cleanup_path.exists():
+            if not self.committed_cleanup_path.is_dir():
+                raise IntegrationError("committed cleanup path is not a directory")
+            shutil.rmtree(self.committed_cleanup_path)
         if not self.transaction.exists():
             return
         if not self.transaction.is_dir():
             raise IntegrationError("transaction path is not a directory")
-        if self.committed_manifest_path.is_file():
-            self._finalize_committed_transaction()
-        else:
-            self._restore_snapshot(self.transaction)
-            shutil.rmtree(self.transaction)
+        self._restore_snapshot(self.transaction)
+        shutil.rmtree(self.transaction)
 
     def begin(self) -> None:
         self._assert_safe_targets()
@@ -293,10 +311,18 @@ class NiriIntegration:
             stat.S_IMODE(target.stat().st_mode),
         )
 
+    def _archive_absent(self, key: str) -> None:
+        archive = self.root / "conflicts" / self.timestamp() / f"{key}.absent"
+        if archive.exists():
+            return
+        self._atomic_write(archive, b"", 0o644)
+
     def _archive_if_changed(
         self, key: str, target: Path, entry: dict[str, object]
     ) -> None:
         if not target.exists():
+            if entry.get("deployed_checksum") or entry.get("original_exists"):
+                self._archive_absent(key)
             return
         if not target.is_file():
             raise IntegrationError(f"managed target is not a regular file: {target}")
@@ -388,14 +414,16 @@ class NiriIntegration:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         )
         self._write_manifest(manifest)
-        shutil.rmtree(self.transaction)
+        os.replace(self.transaction, self.committed_cleanup_path)
+        shutil.rmtree(self.committed_cleanup_path)
+        self.committed_manifest_path.unlink()
 
     def rollback(self) -> None:
         self._assert_safe_targets()
-        self._require_transaction()
         if self.committed_manifest_path.is_file():
             self._finalize_committed_transaction()
             return
+        self._require_transaction()
         self._restore_snapshot(self.transaction)
         shutil.rmtree(self.transaction)
 
@@ -415,7 +443,7 @@ class NiriIntegration:
 
     def restore(self) -> None:
         self._assert_safe_targets()
-        if self.transaction.exists() and self.committed_manifest_path.is_file():
+        if self.committed_manifest_path.is_file():
             self._finalize_committed_transaction()
         manifest = self._load_manifest()
         targets = manifest["targets"]
