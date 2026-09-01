@@ -55,6 +55,7 @@ if [[ "$1" == query && "${2:-}" == --all && "${3:-}" == --json ]]; then
 fi
 if [[ "$1" == query ]]; then
   printf '%s' "${AWWW_OUTPUT:-}"
+  exit "${AWWW_STATUS:-0}"
 fi
 """,
         )
@@ -63,6 +64,7 @@ fi
             """#!/usr/bin/env bash
 if [[ "$1" == query ]]; then
   printf '%s' "${SWWW_OUTPUT:-}"
+  exit "${SWWW_STATUS:-0}"
 fi
 """,
         )
@@ -94,12 +96,16 @@ fi
 
 
 class NiriApplyResolverTests(NiriApplyTestCase):
-    def run_query(self, awww_json=None, awww_stdout="", swww_stdout=""):
+    def run_query(self, awww_json=None, awww_stdout="", swww_stdout="", **overrides):
+        daemon_env = {
+            "AWWW_JSON": "" if awww_json is None else json.dumps(awww_json),
+            "AWWW_OUTPUT": awww_stdout,
+            "SWWW_OUTPUT": swww_stdout,
+        }
+        daemon_env.update(overrides)
         return self.run_script(
             "--print-wallpaper",
-            AWWW_JSON="" if awww_json is None else json.dumps(awww_json),
-            AWWW_OUTPUT=awww_stdout,
-            SWWW_OUTPUT=swww_stdout,
+            **daemon_env,
         )
 
     def test_awww_json_preserves_spaces_and_sorts_outputs(self):
@@ -128,6 +134,33 @@ class NiriApplyResolverTests(NiriApplyTestCase):
         result = self.run_query(awww_stdout="", swww_stdout="")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
+
+    def test_failed_json_command_discards_its_valid_stdout(self):
+        result = self.run_query(
+            awww_json={"": [{"name": "eDP-1", "displaying": {"image": str(self.spaced)}}]},
+            AWWW_JSON_STATUS=1,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+
+    def test_failed_legacy_command_discards_path_like_error_stdout(self):
+        result = self.run_query(
+            awww_stdout=f"eDP-1: image: {self.spaced}\n",
+            swww_stdout=f"HDMI-A-1: path: {self.second}\n",
+            AWWW_STATUS=1,
+            SWWW_STATUS=1,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+
+    def test_failed_json_then_legacy_awww_prints_only_legacy_path(self):
+        result = self.run_query(
+            awww_json={"": [{"name": "HDMI-A-1", "displaying": {"image": str(self.second)}}]},
+            awww_stdout=f"eDP-1: image: {self.spaced}\n",
+            AWWW_JSON_STATUS=1,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, f"{self.spaced}\n")
 
 
 class NiriApplyGenerationTests(NiriApplyTestCase):
@@ -168,6 +201,19 @@ done <<< "$REQUIRED_OUTPUTS"
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse((self.home / ".cache/matugen-niri/last-theme.txt").exists())
+
+    def test_manual_apply_discards_failed_json_stdout_before_legacy_fallback(self):
+        result = self.run_script(
+            "manual",
+            AWWW_JSON=json.dumps(
+                {"": [{"name": "HDMI-A-1", "displaying": {"image": str(self.second)}}]}
+            ),
+            AWWW_JSON_STATUS=1,
+            AWWW_OUTPUT=f"eDP-1: image: {self.spaced}\n",
+            **self.generation_env(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"<{self.spaced}>\n", self.args_file.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -37,8 +37,12 @@ done
 # ---------------------------------------------------------------------------
 
 query_awww() {
+  local output
   command -v awww >/dev/null 2>&1 || return 1
-  awww query --all --json 2>/dev/null | python3 -c '
+  if ! output="$(awww query --all --json 2>/dev/null)"; then
+    return 1
+  fi
+  printf '%s' "$output" | python3 -c '
 import json
 import os
 import sys
@@ -80,7 +84,9 @@ print(candidates[0][1])
 query_legacy() {
   local tool="$1" output line path
   command -v "$tool" >/dev/null 2>&1 || return 1
-  output="$("$tool" query 2>/dev/null || true)"
+  if ! output="$("$tool" query 2>/dev/null)"; then
+    return 1
+  fi
   while IFS= read -r line; do
     case "$line" in
       *"image: "*) path="${line##*image: }" ;;
