@@ -29,6 +29,8 @@ REQUIRED_OUTPUTS = (
     ".config/gtk-3.0/colors.css",
     ".config/gtk-4.0/gtk.css",
     ".config/gtk-4.0/colors.css",
+    ".config/qt5ct/colors/matugen.conf",
+    ".config/qt6ct/colors/matugen.conf",
     ".config/kitty/themes/Matugen.conf",
     ".config/nvim/colors/matugen.vim",
     ".config/btop/themes/matugen.theme",
@@ -289,6 +291,15 @@ done <<< "$REQUIRED_OUTPUTS"
             "manual",
             str(self.spaced),
             **self.generation_env(skipped=".config/niri/colors.kdl"),
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse((self.home / ".cache/matugen-niri/last-theme.txt").exists())
+
+    def test_missing_qt6ct_output_fails_without_writing_theme_state(self):
+        result = self.run_script(
+            "manual",
+            str(self.spaced),
+            **self.generation_env(skipped=".config/qt6ct/colors/matugen.conf"),
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse((self.home / ".cache/matugen-niri/last-theme.txt").exists())
