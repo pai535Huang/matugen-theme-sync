@@ -1589,12 +1589,40 @@ manager.rollback()
 
         def run(command, **kwargs):
             calls.append(command)
-            return SimpleNamespace(returncode=1 if command[0] != "makoctl" else 0)
+            return SimpleNamespace(
+                returncode=1 if command[0] in ("niri", "pkill") else 0
+            )
 
         with patch.object(MODULE.shutil, "which", return_value="/bin/tool"):
             warnings = self.manager.reload(run)
 
         self.assertEqual(
-            [command[0] for command in calls], ["niri", "pkill", "makoctl"]
+            [command[0] for command in calls],
+            ["niri", "pkill", "makoctl", "gsettings", "gsettings", "gsettings"],
         )
         self.assertEqual(warnings, ["could not reload niri", "could not reload pkill"])
+
+    def test_reload_issues_gtk_refresh_via_gsettings(self):
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(MODULE.shutil, "which", return_value="/bin/tool"):
+            warnings = self.manager.reload(run)
+
+        commands = [command[0] for command in calls]
+        self.assertIn("gsettings", commands)
+        self.assertEqual(warnings, [])
+        gsettings_calls = [
+            command[1:] for command in calls if command[0] == "gsettings"
+        ]
+        self.assertEqual(
+            gsettings_calls,
+            [
+                ["set", "org.gnome.desktop.interface", "color-scheme", "prefer-dark"],
+                ["set", "org.gnome.desktop.interface", "gtk-theme", ""],
+                ["set", "org.gnome.desktop.interface", "gtk-theme", "adw-gtk3-dark"],
+            ],
+        )

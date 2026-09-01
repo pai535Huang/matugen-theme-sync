@@ -756,6 +756,13 @@ class NiriIntegration:
             ["niri", "msg", "action", "load-config-file"],
             ["pkill", "-SIGUSR2", "waybar"],
             ["makoctl", "reload"],
+            # Re-selecting the theme makes GTK3 notice regenerated colors.css
+            # files (mirrors the KDE watcher's apply_gtk_mode). gsettings is
+            # available in Niri sessions; Qt apps pick up qt5ct/qt6ct colors on
+            # their next launch, so no reload command is needed for them.
+            ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-dark"],
+            ["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", ""],
+            ["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "adw-gtk3-dark"],
         )
         warnings = []
         for command in commands:
