@@ -670,6 +670,7 @@ if de == DE_NIRI and not bootstrap:
     return 0
 
 manager = None
+service_attempted = False
 if de == DE_NIRI:
     state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
     manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
@@ -682,10 +683,13 @@ if de == DE_NIRI:
         manager.validate(subprocess.run)
         for message in manager.reload(subprocess.run):
             warn(message)
+        service_attempted = True
         if not install_service(info_de, start=True):
             raise IntegrationError("启用 Niri watcher 失败")
         manager.commit()
     except (OSError, IntegrationError) as exc:
+        if service_attempted:
+            disable_service(info_de)
         if manager is not None:
             manager.rollback()
         error(str(exc))
@@ -839,7 +843,7 @@ env.update({
 })
 ```
 
-The fake apply script returns the sequence `one.png`, `one.png`, `two.png` for `--print-wallpaper` and logs normal invocations. Assert exactly one `wallpaper` apply occurs for `two.png`; there is no apply for the unchanged second poll. Add a no-Niri-process test by faking `pgrep` to return 1 and assert a clean exit with no apply calls.
+The fake apply script returns the sequence `one.png`, `one.png`, `two.png` for `--print-wallpaper` and logs normal invocations. Assert exactly two `wallpaper` applies occur, first for `one.png` and then for `two.png`; there is no extra apply for the unchanged second poll. Add a no-Niri-process test by faking `pgrep` to return 1 and assert a clean exit with no apply calls.
 
 - [ ] **Step 2: Run watcher tests and verify cache-watcher behavior fails them**
 
@@ -980,7 +984,7 @@ Expected: Niri reports the config valid; Rofi exits 0 after dumping the theme; M
 
 - [ ] **Step 7: Review the final diff only for intended Niri and shared detection changes**
 
-Run: `git status --short` and `git diff --stat HEAD~7..HEAD`.
+Run: `git status --short` and `git diff --stat 75d8ec1..HEAD`.
 
 Expected: no generated caches or local `/home/hjk` configuration files are tracked; pre-existing user changes remain intact; Plasma/GNOME changes are limited to shared detection/status wording already required by Niri support.
 
