@@ -1,5 +1,7 @@
+import configparser
 import json
 import os
+import shlex
 import subprocess
 import tempfile
 import time
@@ -10,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin" / "matugen-niri-apply"
 WATCHER = ROOT / "bin" / "matugen-niri-watch"
+NIRI_UNIT = ROOT / "systemd" / "matugen-niri.service"
 REQUIRED_OUTPUTS = (
     ".config/niri/colors.kdl",
     ".config/waybar/colors.css",
@@ -330,6 +333,85 @@ fi
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.call_lines(), [])
+
+    def test_missing_wayland_display_still_polls_the_wallpaper_daemon(self):
+        result = self.run_watcher("\n\n", 2, WAYLAND_DISPLAY="")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.query_count.exists(), result.stderr)
+        self.assertEqual(self.query_count.read_text(encoding="utf-8").strip(), "2")
+
+    def test_service_path_reaches_user_bin_matugen_through_installed_helpers(self):
+        parser = configparser.RawConfigParser(interpolation=None)
+        parser.read(NIRI_UNIT, encoding="utf-8")
+        environment = parser.get("Service", "Environment", fallback="")
+        variables = dict(item.split("=", 1) for item in shlex.split(environment))
+        path_template = variables.get("PATH")
+
+        self.assertIsNotNone(path_template)
+        self.assertIn("%h/.local/bin", path_template.split(":"))
+        self.assertTrue({"/usr/local/bin", "/usr/bin", "/bin"}.issubset(path_template.split(":")))
+
+        user_bin = self.home / ".local/bin"
+        user_bin.mkdir(parents=True)
+        for name, source in (
+            ("matugen-niri-watch", WATCHER.read_text(encoding="utf-8")),
+            ("matugen-niri-apply", SCRIPT.read_text(encoding="utf-8")),
+            ("pgrep", "#!/usr/bin/env bash\nexit 0\n"),
+            (
+                "awww",
+                "#!/usr/bin/env bash\nprintf '%s' \"$AWWW_JSON\"\n",
+            ),
+            (
+                "matugen",
+                """#!/usr/bin/env bash
+printf '<%s>\\n' "$@" > "$MATUGEN_ARGS"
+while IFS= read -r output; do
+  [[ -n "$output" ]] || continue
+  mkdir -p "$(dirname "$HOME/$output")"
+  : > "$HOME/$output"
+done <<< "$REQUIRED_OUTPUTS"
+""",
+            ),
+        ):
+            path = user_bin / name
+            path.write_text(source, encoding="utf-8")
+            path.chmod(0o755)
+
+        image = self.home / "Pictures/daemon.png"
+        image.parent.mkdir(parents=True)
+        image.touch()
+        config = self.home / ".config/matugen"
+        (config / "templates").mkdir(parents=True)
+        (config / "config.toml").touch()
+        (config / "templates/template.toml").touch()
+        args_file = self.base / "matugen-args.txt"
+        path = ":".join(part.replace("%h", str(self.home)) for part in path_template.split(":"))
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": path,
+                "MATUGEN_NIRI_WATCH_INTERVAL": "0",
+                "MATUGEN_NIRI_WATCH_MAX_POLLS": "1",
+                "AWWW_JSON": json.dumps(
+                    {"": [{"name": "eDP-1", "displaying": {"image": str(image)}}]}
+                ),
+                "MATUGEN_ARGS": str(args_file),
+                "REQUIRED_OUTPUTS": "\n".join(REQUIRED_OUTPUTS),
+            }
+        )
+        result = subprocess.run(
+            ["timeout", "3", str(user_bin / "matugen-niri-watch")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"<{image}>\n", args_file.read_text(encoding="utf-8"))
 
     def test_terminates_cleanly_when_signaled(self):
         sequence_file = self.base / "wallpaper-sequence.txt"

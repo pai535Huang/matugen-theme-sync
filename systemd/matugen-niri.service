@@ -3,6 +3,7 @@ Description=Synchronize Matugen themes with the Niri wallpaper daemon
 After=graphical-session.target
 
 [Service]
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=%h/.local/bin/matugen-niri-watch
 Restart=on-failure
 RestartSec=3

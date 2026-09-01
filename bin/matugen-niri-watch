@@ -16,11 +16,6 @@ if ! pgrep -x niri >/dev/null 2>&1; then
   exit 0
 fi
 
-if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-  log "No WAYLAND_DISPLAY; exiting"
-  exit 0
-fi
-
 if ! [[ "$INTERVAL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   log "MATUGEN_NIRI_WATCH_INTERVAL must be a non-negative number"
   exit 2
