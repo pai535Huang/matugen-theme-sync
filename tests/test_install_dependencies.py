@@ -207,6 +207,13 @@ class InstallDependencyTests(unittest.TestCase):
             (self.home / ".local" / "share" / "matugen-theme-sync").exists()
         )
 
+    def test_install_layout_copies_niri_static_resources(self):
+        installer = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn(
+            'cp -a "$src/bin" "$src/matugen" "$src/niri" "$src/systemd"',
+            installer,
+        )
+
     def test_readme_documents_supported_matugen_installers(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for expected in ("pacman", "dnf", "apt-get", "Cargo", "~/.local/bin"):

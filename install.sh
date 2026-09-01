@@ -66,7 +66,7 @@ install_files() {
   fi
   rm -rf "$INSTALL_DIR"
   install -d "$INSTALL_DIR"
-  cp -a "$src/bin" "$src/matugen" "$src/systemd" "$INSTALL_DIR/"
+  cp -a "$src/bin" "$src/matugen" "$src/niri" "$src/systemd" "$INSTALL_DIR/"
   cp "$src/install.sh" "$INSTALL_DIR/install.sh"
   chmod +x "$INSTALL_DIR/bin/"*
   ok "installed: $INSTALL_DIR"
@@ -84,7 +84,7 @@ desktop_entry() {
 [Desktop Entry]
 Type=Application
 Name=Matugen Theme Sync
-Comment=Deploy or remove the Matugen theme-sync pipeline for KDE Plasma / GNOME
+Comment=Deploy or remove the Matugen theme-sync pipeline for KDE Plasma / GNOME / Niri
 Exec=$INSTALL_DIR/bin/$APP_NAME show-ui
 Icon=preferences-desktop-theme
 Terminal=false

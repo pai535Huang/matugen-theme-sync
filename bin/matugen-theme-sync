@@ -20,6 +20,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(os.path.realpath(__file__)).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from niri_integration import IntegrationError, NiriIntegration
+
 APP_NAME = "matugen-theme-sync"
 
 HOME = Path.home()
@@ -30,6 +36,7 @@ STATE_DIR = HOME / ".cache" / "matugen-plasma"
 
 DE_PLASMA = "plasma"
 DE_GNOME = "gnome"
+DE_NIRI = "niri"
 
 DE_INFO = {
     DE_PLASMA: {
@@ -43,6 +50,12 @@ DE_INFO = {
         "service": "matugen-gnome.service",
         "scripts": ("matugen-gnome-apply", "matugen-gnome-watch"),
         "config": "config-gnome.toml",
+    },
+    DE_NIRI: {
+        "name": "Niri",
+        "service": "matugen-niri.service",
+        "scripts": ("matugen-niri-apply", "matugen-niri-watch"),
+        "config": "config-niri.toml",
     },
 }
 
@@ -72,6 +85,7 @@ BIN_DIR = resource_root() / "bin"
 MATUGEN_DIR = resource_root() / "matugen"
 TEMPLATES_DIR = MATUGEN_DIR / "templates"
 SYSTEMD_DIR = resource_root() / "systemd"
+NIRI_RESOURCES_DIR = resource_root() / "niri"
 
 # ---------------------------------------------------------------------------
 # Terminal output helpers
@@ -138,17 +152,13 @@ def detect_desktop():
         )
     ).lower()
 
+    if os.environ.get("NIRI_SOCKET"):
+        return DE_NIRI
+    if "niri" in hints:
+        return DE_NIRI
     if "plasma" in hints or "kde" in hints:
         return DE_PLASMA
     if "gnome" in hints or "ubuntu:gnome" in hints:
-        return DE_GNOME
-
-    has_session = bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))
-    if not has_session:
-        return None
-    if shutil.which("plasma-apply-colorscheme"):
-        return DE_PLASMA
-    if shutil.which("gnome-shell"):
         return DE_GNOME
     return None
 
@@ -212,19 +222,35 @@ def install_file(src, dst, mode=0o644):
     os.chmod(dst, mode)
 
 
-def check_dependencies(de):
-    missing = []
+def dependency_report(de: str) -> tuple[list[str], list[str]]:
+    required = []
+    optional = []
     if not shutil.which("matugen"):
-        missing.append("matugen")
+        required.append("matugen")
     if de == DE_PLASMA:
         for tool in ("kreadconfig6", "kwriteconfig6", "plasma-apply-colorscheme"):
             if not shutil.which(tool):
-                missing.append(tool)
+                required.append(tool)
+    elif de == DE_NIRI:
+        if not shutil.which("niri"):
+            required.append("niri")
+        if not (shutil.which("swww") or shutil.which("awww")):
+            required.append("swww/awww")
+        for tool in ("makoctl", "waybar", "rofi"):
+            if not shutil.which(tool):
+                optional.append(tool)
     elif not shutil.which("gsettings"):
-        missing.append("gsettings")
-    if missing:
-        warn("缺少依赖: " + ", ".join(missing))
-    return not missing
+        required.append("gsettings")
+    return required, optional
+
+
+def check_dependencies(de):
+    required, optional = dependency_report(de)
+    if required:
+        warn("缺少依赖: " + ", ".join(required))
+    if optional:
+        warn("未安装可选组件: " + ", ".join(optional))
+    return not required
 
 
 # ---------------------------------------------------------------------------
@@ -236,13 +262,45 @@ def bootstrap_command(de):
     if de == DE_PLASMA:
         mode = kde_current_mode() or "dark"
         return [str(LOCAL_BIN / "matugen-plasma-apply"), mode, "manual", "--force"]
+    if de == DE_NIRI:
+        return [str(LOCAL_BIN / "matugen-niri-apply"), "manual", "--force"]
     return [str(LOCAL_BIN / "matugen-gnome-apply")]
+
+
+def install_service(info_de, start: bool) -> bool:
+    systemctl = shutil.which("systemctl")
+    if not systemctl:
+        warn("未找到 systemctl; 请稍后手动执行 systemctl --user enable "
+             f"{info_de['service']}")
+        return True
+    reload_result = run([systemctl, "--user", "daemon-reload"])
+    if reload_result is None or reload_result.returncode != 0:
+        error("systemctl --user daemon-reload 失败")
+        return False
+    command = [systemctl, "--user", "enable"]
+    if start:
+        command.append("--now")
+    command.append(info_de["service"])
+    result = run(command)
+    if result is None or result.returncode != 0:
+        error(f"启用并启动服务失败: "
+              f"{(result.stderr.strip() if result else 'systemctl 不可用')}")
+        return False
+    ok(f"服务已启用并启动: {info_de['service']}")
+    return True
+
+
+def disable_service(info_de) -> None:
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        run([systemctl, "--user", "disable", "--now", info_de["service"]])
+        ok(f"已停止并禁用服务: {info_de['service']}")
 
 
 def cmd_apply(force_de=None, bootstrap=True):
     de = force_de or detect_desktop()
     if not de:
-        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma 和 GNOME)。")
+        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma、GNOME 和 Niri)。")
         return 1
 
     info_de = DE_INFO[de]
@@ -302,24 +360,40 @@ def cmd_apply(force_de=None, bootstrap=True):
     install_file(SYSTEMD_DIR / info_de["service"], service_dst)
     ok(f"systemd 服务: {service_dst}")
 
-    systemctl = shutil.which("systemctl")
-    if not systemctl:
-        warn("未找到 systemctl; 请稍后手动执行 systemctl --user enable "
-             f"{info_de['service']}")
-    else:
-        if run([systemctl, "--user", "daemon-reload"]).returncode != 0:
-            error("systemctl --user daemon-reload 失败")
-            return 1
-        res = run([systemctl, "--user", "enable", "--now", info_de["service"]])
-        if res is None or res.returncode != 0:
-            error(f"启用并启动服务失败: "
-                  f"{(res.stderr.strip() if res else 'systemctl 不可用')}")
-            return 1
-        ok(f"服务已启用并启动: {info_de['service']}")
+    if de != DE_NIRI and not install_service(info_de, start=True):
+        return 1
 
     check_dependencies(de)
 
-    if bootstrap:
+    if de == DE_NIRI and not bootstrap:
+        warn("--no-bootstrap: 已安装 Niri 辅助文件，但未接管主题或启用 watcher")
+        return 0
+
+    if de == DE_NIRI:
+        state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+        manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
+        service_attempted = False
+        try:
+            manager.begin()
+            manager.deploy_static()
+            if stream(bootstrap_command(de)) != 0:
+                raise IntegrationError("首次 Matugen 生成失败")
+            manager.activate()
+            manager.validate(subprocess.run)
+            for message in manager.reload(subprocess.run):
+                warn(message)
+            service_attempted = True
+            if not install_service(info_de, start=True):
+                raise IntegrationError("启用 Niri watcher 失败")
+            manager.commit()
+        except (OSError, IntegrationError) as exc:
+            if service_attempted:
+                disable_service(info_de)
+            manager.rollback()
+            error(str(exc))
+            return 1
+        ok("首次主题已生成")
+    elif bootstrap:
         if not shutil.which("matugen"):
             warn("未检测到 matugen, 跳过首次主题生成 (安装: sudo pacman -S matugen)")
         else:
@@ -340,7 +414,7 @@ def cmd_apply(force_de=None, bootstrap=True):
 def cmd_uninstall(force_de=None, purge=False):
     de = force_de or detect_desktop()
     if not de:
-        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma 和 GNOME)。")
+        error("无法检测到受支持的桌面环境 (仅支持 KDE Plasma、GNOME 和 Niri)。")
         return 1
 
     info_de = DE_INFO[de]
@@ -352,15 +426,23 @@ def cmd_uninstall(force_de=None, purge=False):
     step(f"正在卸载 {name} 的 Matugen 主题同步\u2026")
     print()
 
-    systemctl = shutil.which("systemctl")
-    if systemctl:
-        run([systemctl, "--user", "disable", "--now", info_de["service"]])
-        ok(f"已停止并禁用服务: {info_de['service']}")
+    disable_service(info_de)
+
+    manager = None
+    if de == DE_NIRI:
+        state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+        manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
+        try:
+            manager.restore()
+        except (OSError, IntegrationError) as exc:
+            error(str(exc))
+            return 1
 
     service_file = SYSTEMD_USER_DIR / info_de["service"]
     if service_file.exists():
         service_file.unlink()
         ok(f"已删除服务文件: {service_file}")
+        systemctl = shutil.which("systemctl")
         if systemctl:
             run([systemctl, "--user", "daemon-reload"])
     else:
@@ -374,7 +456,13 @@ def cmd_uninstall(force_de=None, purge=False):
 
     if purge:
         shutil.rmtree(MATUGEN_CONFIG_DIR, ignore_errors=True)
-        shutil.rmtree(STATE_DIR, ignore_errors=True)
+        shutil.rmtree(HOME / ".cache" / f"matugen-{de}", ignore_errors=True)
+        if manager is not None:
+            conflicts = manager.root / "conflicts"
+            if conflicts.is_dir() and any(conflicts.iterdir()):
+                warn(f"非空冲突归档已保留: {conflicts}")
+            else:
+                shutil.rmtree(manager.root, ignore_errors=True)
         ok("已删除 ~/.config/matugen 配置与缓存状态 (--purge)")
 
     print()
@@ -393,11 +481,11 @@ def cmd_status():
     if de:
         ok(f"桌面环境: {DE_INFO[de]['name']} ({session})")
     else:
-        warn(f"桌面环境: 未知 ({session}) \u2014 仅支持 KDE Plasma 与 GNOME")
+        warn(f"桌面环境: 未知 ({session}) \u2014 仅支持 KDE Plasma、GNOME 与 Niri")
     print()
 
     systemctl = shutil.which("systemctl")
-    units = [DE_INFO[DE_PLASMA], DE_INFO[DE_GNOME]] if not de else [DE_INFO[de]]
+    units = [DE_INFO[DE_PLASMA], DE_INFO[DE_GNOME], DE_INFO[DE_NIRI]] if not de else [DE_INFO[de]]
 
     for info_de in units:
         print(f"{info_de['name']} 安装状态:")
@@ -480,7 +568,7 @@ class SyncApp:
         header = Adw.HeaderBar()
         header.set_title_widget(
             Adw.WindowTitle(title="Matugen Theme Sync",
-                            subtitle="KDE Plasma / GNOME 主题同步")
+                            subtitle="KDE Plasma / GNOME / Niri 主题同步")
         )
         toolbar.add_top_bar(header)
 
@@ -644,18 +732,18 @@ def cmd_show_ui():
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
-        description="为当前桌面环境 (KDE Plasma / GNOME) 部署或移除 Matugen 主题同步",
+        description="为当前桌面环境 (KDE Plasma / GNOME / Niri) 部署或移除 Matugen 主题同步",
     )
     sub = parser.add_subparsers(dest="command")
 
     p_apply = sub.add_parser("apply", help="部署脚本、matugen 配置并注册 systemd 服务")
-    p_apply.add_argument("--de", choices=[DE_PLASMA, DE_GNOME],
+    p_apply.add_argument("--de", choices=[DE_PLASMA, DE_GNOME, DE_NIRI],
                          help="强制指定桌面环境 (默认自动检测)")
     p_apply.add_argument("--no-bootstrap", action="store_true",
                          help="安装后不立即生成主题")
 
     p_uninstall = sub.add_parser("uninstall", help="删除脚本并移除 systemd 服务")
-    p_uninstall.add_argument("--de", choices=[DE_PLASMA, DE_GNOME],
+    p_uninstall.add_argument("--de", choices=[DE_PLASMA, DE_GNOME, DE_NIRI],
                              help="强制指定桌面环境 (默认自动检测)")
     p_uninstall.add_argument("--purge", action="store_true",
                              help="同时删除 ~/.config/matugen 配置")
