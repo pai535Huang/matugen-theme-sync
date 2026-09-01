@@ -207,12 +207,46 @@ class InstallDependencyTests(unittest.TestCase):
             (self.home / ".local" / "share" / "matugen-theme-sync").exists()
         )
 
-    def test_install_layout_copies_niri_static_resources(self):
-        installer = INSTALLER.read_text(encoding="utf-8")
-        self.assertIn(
-            'cp -a "$src/bin" "$src/matugen" "$src/niri" "$src/systemd"',
-            installer,
+    def make_install_source(self):
+        source = self.base / "source"
+        for directory in ("bin", "matugen", "niri", "systemd"):
+            (source / directory).mkdir(parents=True)
+            (source / directory / f"{directory}.fixture").write_text(
+                f"{directory}\n", encoding="utf-8"
+            )
+        (source / "install.sh").write_text("installer\n", encoding="utf-8")
+        return source
+
+    def test_install_files_copies_niri_and_removes_stale_install_contents(self):
+        source = self.make_install_source()
+        install_dir = self.home / ".local/share/matugen-theme-sync"
+        install_dir.mkdir(parents=True)
+        stale = install_dir / "stale.fixture"
+        stale.write_text("obsolete\n", encoding="utf-8")
+
+        result = self.run_bash(
+            f'PATH="/usr/bin:/bin:$PATH"\ninstall_files "{source}"'
         )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((install_dir / "niri/niri.fixture").is_file())
+        self.assertFalse(stale.exists())
+
+    def test_install_files_rejects_an_unexpected_target_name(self):
+        source = self.make_install_source()
+        unsafe = self.home / ".local/share/not-matugen-theme-sync"
+        unsafe.mkdir(parents=True)
+        sentinel = unsafe / "keep.fixture"
+        sentinel.write_text("keep\n", encoding="utf-8")
+
+        result = self.run_bash(
+            f'PATH="/usr/bin:/bin:$PATH"\n'
+            f'INSTALL_DIR="{unsafe}"\ninstall_files "{source}"'
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(sentinel.is_file())
+        self.assertIn("refusing to remove unexpected directory", result.stderr)
 
     def test_readme_documents_supported_matugen_installers(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

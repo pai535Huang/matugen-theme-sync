@@ -24,6 +24,22 @@ def token_roles(source: str) -> set[str]:
 
 
 class NiriTemplateTest(unittest.TestCase):
+    def test_readme_documents_managed_niri_lifecycle(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for text in (
+            "~/.local/state/matugen-theme-sync/niri",
+            "conflicts",
+            'include "./colors.kdl"',
+            "Waybar",
+            "Rofi",
+            "Mako",
+            "awww query --json",
+            "uninstall",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(text, readme)
+        self.assertNotIn('import "colors.kdl"', readme)
+
     def test_static_niri_application_themes_are_portable(self) -> None:
         for source in (STATIC_WAYBAR, STATIC_ROFI, STATIC_MAKO):
             self.assertNotIn("/home/hjk", source)

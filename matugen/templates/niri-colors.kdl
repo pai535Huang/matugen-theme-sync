@@ -1,10 +1,12 @@
 // Niri colors
 // Generated with Matugen
 //
-// Import in ~/.config/niri/config.kdl:
-//   import "colors.kdl";
+// Included by the managed block at the end of ~/.config/niri/config.kdl:
+//   include "./colors.kdl"
 //
-// Then reference e.g. colors.background in your config (see the Niri wiki).
+// Niri includes are positional. These layout sections therefore directly
+// override earlier focus-ring, border, shadow, tab-indicator, overview, and
+// recent-windows colors while leaving their non-color settings unchanged.
 // Reload after regeneration: niri msg action load-config-file
 
 layout {

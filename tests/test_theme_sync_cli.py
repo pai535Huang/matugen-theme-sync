@@ -41,6 +41,16 @@ class DesktopDetectionTests(unittest.TestCase):
         ):
             self.assertIsNone(MODULE.detect_desktop())
 
+    def test_existing_plasma_and_gnome_session_hints_still_detect(self):
+        for hint, expected in (
+            ("KDE", MODULE.DE_PLASMA),
+            ("GNOME", MODULE.DE_GNOME),
+        ):
+            with self.subTest(hint=hint), mock.patch.dict(
+                MODULE.os.environ, {"XDG_CURRENT_DESKTOP": hint}, clear=True
+            ):
+                self.assertEqual(MODULE.detect_desktop(), expected)
+
     def test_niri_dependency_report_separates_optional_apps(self):
         available = {
             "matugen": "/bin/matugen",
@@ -53,6 +63,37 @@ class DesktopDetectionTests(unittest.TestCase):
             required, optional = MODULE.dependency_report(MODULE.DE_NIRI)
         self.assertEqual(required, [])
         self.assertEqual(optional, ["makoctl", "waybar", "rofi"])
+
+    def test_niri_dependency_report_accepts_legacy_swww_only(self):
+        available = {
+            "matugen": "/bin/matugen",
+            "niri": "/bin/niri",
+            "swww": "/bin/swww",
+        }
+        with mock.patch.object(MODULE.shutil, "which", side_effect=available.get):
+            required, optional = MODULE.dependency_report(MODULE.DE_NIRI)
+        self.assertEqual(required, [])
+        self.assertEqual(optional, ["makoctl", "waybar", "rofi"])
+
+    def test_niri_dependency_report_requires_one_wallpaper_daemon(self):
+        available = {"matugen": "/bin/matugen", "niri": "/bin/niri"}
+        with mock.patch.object(MODULE.shutil, "which", side_effect=available.get):
+            required, optional = MODULE.dependency_report(MODULE.DE_NIRI)
+        self.assertEqual(required, ["swww/awww"])
+        self.assertEqual(optional, ["makoctl", "waybar", "rofi"])
+
+    def test_plasma_and_gnome_dependency_reports_remain_satisfied(self):
+        available = {
+            "matugen": "/bin/matugen",
+            "kreadconfig6": "/bin/kreadconfig6",
+            "kwriteconfig6": "/bin/kwriteconfig6",
+            "plasma-apply-colorscheme": "/bin/plasma-apply-colorscheme",
+            "gsettings": "/bin/gsettings",
+        }
+        with mock.patch.object(MODULE.shutil, "which", side_effect=available.get):
+            for desktop in (MODULE.DE_PLASMA, MODULE.DE_GNOME):
+                with self.subTest(desktop=desktop):
+                    self.assertEqual(MODULE.dependency_report(desktop), ([], []))
 
     def test_dependency_output_reports_optional_apps_separately(self):
         output = io.StringIO()

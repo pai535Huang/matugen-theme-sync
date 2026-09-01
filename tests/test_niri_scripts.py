@@ -140,6 +140,26 @@ class NiriApplyResolverTests(NiriApplyTestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
 
+    def test_print_wallpaper_ignores_explicit_argv_and_remains_daemon_only(self):
+        payload = {
+            "": [{"name": "eDP-1", "displaying": {"image": str(self.spaced)}}]
+        }
+        result = self.run_script(
+            "--print-wallpaper",
+            str(self.second),
+            AWWW_JSON=json.dumps(payload),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, f"{self.spaced}\n")
+
+    def test_wallpaper_daemon_fallback_prefers_legacy_awww_before_swww(self):
+        result = self.run_query(
+            awww_stdout=f"eDP-1: image: {self.spaced}\n",
+            swww_stdout=f"eDP-1: image: {self.second}\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, f"{self.spaced}\n")
+
     def test_failed_json_command_discards_its_valid_stdout(self):
         result = self.run_query(
             awww_json={"": [{"name": "eDP-1", "displaying": {"image": str(self.spaced)}}]},
@@ -176,6 +196,7 @@ class NiriApplyGenerationTests(NiriApplyTestCase):
             "matugen",
             """#!/usr/bin/env bash
 printf '<%s>\\n' "$@" > "$MATUGEN_ARGS"
+(( ${MATUGEN_STATUS:-0} == 0 )) || exit "$MATUGEN_STATUS"
 while IFS= read -r output; do
   [[ -n "$output" ]] || continue
   [[ "$output" == "$MATUGEN_SKIP_OUTPUT" ]] && continue
@@ -189,6 +210,7 @@ done <<< "$REQUIRED_OUTPUTS"
         return {
             "MATUGEN_ARGS": self.args_file,
             "MATUGEN_SKIP_OUTPUT": skipped,
+            "MATUGEN_STATUS": "0",
             "REQUIRED_OUTPUTS": "\n".join(REQUIRED_OUTPUTS),
         }
 
@@ -197,6 +219,32 @@ done <<< "$REQUIRED_OUTPUTS"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"<{self.spaced}>\n", self.args_file.read_text(encoding="utf-8"))
         self.assertTrue((self.home / ".cache/matugen-niri/last-theme.txt").is_file())
+
+    def test_missing_explicit_wallpaper_fails_before_running_matugen(self):
+        missing = self.home / "Pictures/Wallpapers/missing.png"
+        result = self.run_script("manual", str(missing), **self.generation_env())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Wallpaper file not found", result.stdout)
+        self.assertFalse(self.args_file.exists())
+
+    def test_normal_apply_uses_daemon_wallpaper_before_directory_fallback(self):
+        result = self.run_script(
+            "manual",
+            SWWW_OUTPUT=f"eDP-1: image: {self.second}\n",
+            **self.generation_env(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"<{self.second}>\n", self.args_file.read_text(encoding="utf-8"))
+
+    def test_matugen_nonzero_exit_does_not_write_theme_state(self):
+        result = self.run_script(
+            "manual",
+            str(self.spaced),
+            **(self.generation_env() | {"MATUGEN_STATUS": "9"}),
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("matugen failed", result.stdout)
+        self.assertFalse((self.home / ".cache/matugen-niri/last-theme.txt").exists())
 
     def test_missing_generated_niri_output_fails_without_writing_theme_state(self):
         result = self.run_script(
