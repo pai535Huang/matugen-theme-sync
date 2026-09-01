@@ -528,7 +528,93 @@ class NiriCommandTests(unittest.TestCase):
             (self.home / ".config/matugen/templates/colors.txt").is_file()
         )
         self.assertFalse((self.home / ".config/niri/config.kdl").exists())
-        self.assertIn("--no-bootstrap", output.getvalue())
+        self.assertIn(
+            "--no-bootstrap: 仅更新辅助文件；保持当前 Niri 应用主题与 watcher 状态不变",
+            output.getvalue(),
+        )
+
+    def test_no_bootstrap_preserves_existing_managed_theme_and_watcher_state(self):
+        managed_contents = {
+            self.home / ".config/niri/config.kdl": "managed niri config\n",
+            self.home / ".config/waybar/style.css": "managed waybar style\n",
+            self.home / ".config/rofi/config.rasi": "managed rofi config\n",
+            self.home / ".config/mako/config": "managed mako config\n",
+            self.home
+            / ".local/state/matugen-theme-sync/niri/manifest.json": "managed state\n",
+            self.home / ".cache/matugen-niri/last-theme.txt": "theme key\n",
+        }
+        for path, content in managed_contents.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
+        watcher_state = self.base / "watcher.state"
+        watcher_state.write_text("enabled\n", encoding="utf-8")
+        events = []
+
+        def record(event):
+            events.append(event)
+
+        class ObservableIntegration:
+            def __init__(self, *args):
+                record("construct_integration")
+
+            def begin(self):
+                record("begin")
+
+            def deploy_static(self):
+                record("deploy_static")
+
+            def activate(self):
+                record("activate")
+
+            def validate(self, run):
+                record("validate")
+
+            def reload(self, run):
+                record("reload")
+                return []
+
+            def commit(self):
+                record("commit")
+
+        def enable(info_de, start):
+            watcher_state.write_text("enable called\n", encoding="utf-8")
+            record("enable")
+            return True
+
+        def disable(info_de):
+            watcher_state.write_text("disable called\n", encoding="utf-8")
+            record("disable")
+
+        output = io.StringIO()
+        with mock.patch.object(
+            MODULE, "NiriIntegration", ObservableIntegration
+        ), mock.patch.object(
+            MODULE, "stream", side_effect=lambda command: record("bootstrap") or 0
+        ), mock.patch.object(
+            MODULE, "install_service", side_effect=enable
+        ), mock.patch.object(
+            MODULE, "disable_service", side_effect=disable
+        ), mock.patch.object(
+            MODULE, "check_dependencies"
+        ), mock.patch.object(
+            MODULE, "detect_session_type", return_value="wayland"
+        ), mock.patch.object(
+            MODULE, "script_path", return_value=BIN / "matugen-theme-sync"
+        ), contextlib.redirect_stdout(output):
+            result = MODULE.cmd_apply(force_de=MODULE.DE_NIRI, bootstrap=False)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(events, [])
+        self.assertEqual(watcher_state.read_text(encoding="utf-8"), "enabled\n")
+        for path, content in managed_contents.items():
+            with self.subTest(path=path):
+                self.assertEqual(path.read_text(encoding="utf-8"), content)
+        self.assertIn(
+            "--no-bootstrap: 仅更新辅助文件；保持当前 Niri 应用主题与 watcher 状态不变",
+            output.getvalue(),
+        )
+        self.assertNotIn("未接管主题或启用 watcher", output.getvalue())
 
     def test_niri_uninstall_disables_restores_then_removes_helpers(self):
         local_bin = self.home / ".local/bin"

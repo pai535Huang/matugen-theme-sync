@@ -366,7 +366,7 @@ def cmd_apply(force_de=None, bootstrap=True):
     check_dependencies(de)
 
     if de == DE_NIRI and not bootstrap:
-        warn("--no-bootstrap: 已安装 Niri 辅助文件，但未接管主题或启用 watcher")
+        warn("--no-bootstrap: 仅更新辅助文件；保持当前 Niri 应用主题与 watcher 状态不变")
         return 0
 
     if de == DE_NIRI:
