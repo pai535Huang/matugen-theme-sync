@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Poll the wallpaper daemon selected by matugen-niri-apply. Keeping the
+# selected image here avoids watching daemon state files or Niri configuration
+# writes.
+
+APPLY="${MATUGEN_NIRI_APPLY:-$HOME/.local/bin/matugen-niri-apply}"
+INTERVAL="${MATUGEN_NIRI_WATCH_INTERVAL:-3}"
+MAX_POLLS="${MATUGEN_NIRI_WATCH_MAX_POLLS:-0}"
+
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >&2; }
+
+if ! pgrep -x niri >/dev/null 2>&1; then
+  log "Niri is not running; exiting (enable this service only in a Niri session)"
+  exit 0
+fi
+
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+  log "No WAYLAND_DISPLAY; exiting"
+  exit 0
+fi
+
+if ! [[ "$INTERVAL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  log "MATUGEN_NIRI_WATCH_INTERVAL must be a non-negative number"
+  exit 2
+fi
+
+if ! [[ "$MAX_POLLS" =~ ^[0-9]+$ ]]; then
+  log "MATUGEN_NIRI_WATCH_MAX_POLLS must be a non-negative integer"
+  exit 2
+fi
+
+trap 'log "Niri wallpaper watcher stopped"; exit 0' TERM INT
+
+last_image=""
+polls=0
+log "Watching Niri wallpaper daemon every ${INTERVAL}s"
+
+while true; do
+  if image="$("$APPLY" --print-wallpaper 2>/dev/null)"; then
+    if [[ -n "$image" && "$image" != "$last_image" ]]; then
+      if "$APPLY" wallpaper "$image"; then
+        last_image="$image"
+      else
+        log "Theme sync failed for wallpaper: $image"
+      fi
+    fi
+  else
+    log "Could not determine the current Niri wallpaper"
+  fi
+
+  (( polls += 1 ))
+  if (( MAX_POLLS > 0 && polls >= MAX_POLLS )); then
+    break
+  fi
+  sleep "$INTERVAL"
+done

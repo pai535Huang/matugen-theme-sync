@@ -2,12 +2,14 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin" / "matugen-niri-apply"
+WATCHER = ROOT / "bin" / "matugen-niri-watch"
 REQUIRED_OUTPUTS = (
     ".config/niri/colors.kdl",
     ".config/waybar/colors.css",
@@ -214,6 +216,157 @@ done <<< "$REQUIRED_OUTPUTS"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"<{self.spaced}>\n", self.args_file.read_text(encoding="utf-8"))
+
+
+class NiriWatcherTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        self.home = self.base / "home"
+        self.tools = self.base / "bin"
+        self.tools.mkdir(parents=True)
+        self.calls = self.base / "apply-calls.txt"
+        self.query_count = self.base / "query-count.txt"
+        self.apply_count = self.base / "apply-count.txt"
+        self.write_tool("pgrep", "#!/usr/bin/env bash\nexit \"${PGREP_STATUS:-0}\"\n")
+        self.apply = self.write_tool(
+            "fake-matugen-niri-apply",
+            """#!/usr/bin/env bash
+if [[ "${1:-}" == "--print-wallpaper" ]]; then
+  count=0
+  [[ -f "$MATUGEN_NIRI_QUERY_COUNT" ]] && count="$(<"$MATUGEN_NIRI_QUERY_COUNT")"
+  (( count += 1 ))
+  printf '%s\\n' "$count" > "$MATUGEN_NIRI_QUERY_COUNT"
+  image="$(sed -n "${count}p" "$MATUGEN_NIRI_WATCH_SEQUENCE")"
+  [[ "$image" == "__FAIL__" ]] && exit 1
+  printf '%s\\n' "$image"
+  exit 0
+fi
+printf '<%s>\\n' "$@" >> "$MATUGEN_NIRI_APPLY_CALLS"
+count=0
+[[ -f "$MATUGEN_NIRI_APPLY_COUNT" ]] && count="$(<"$MATUGEN_NIRI_APPLY_COUNT")"
+(( count += 1 ))
+printf '%s\\n' "$count" > "$MATUGEN_NIRI_APPLY_COUNT"
+if (( count <= ${MATUGEN_NIRI_APPLY_FAILS:-0} )); then
+  exit 1
+fi
+""",
+        )
+
+    def write_tool(self, name, source):
+        path = self.tools / name
+        path.write_text(source, encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def run_watcher(self, sequence, polls, **overrides):
+        sequence_file = self.base / "wallpaper-sequence.txt"
+        sequence_file.write_text(sequence, encoding="utf-8")
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.tools}{os.pathsep}{env['PATH']}",
+                "WAYLAND_DISPLAY": "wayland-1",
+                "MATUGEN_NIRI_APPLY": str(self.apply),
+                "MATUGEN_NIRI_WATCH_INTERVAL": "0",
+                "MATUGEN_NIRI_WATCH_MAX_POLLS": str(polls),
+                "MATUGEN_NIRI_WATCH_SEQUENCE": str(sequence_file),
+                "MATUGEN_NIRI_QUERY_COUNT": str(self.query_count),
+                "MATUGEN_NIRI_APPLY_COUNT": str(self.apply_count),
+                "MATUGEN_NIRI_APPLY_CALLS": str(self.calls),
+            }
+        )
+        env.update({key: str(value) for key, value in overrides.items()})
+        return subprocess.run(
+            ["timeout", "3", "bash", str(WATCHER)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def call_lines(self):
+        if not self.calls.exists():
+            return []
+        return self.calls.read_text(encoding="utf-8").splitlines()
+
+    def test_applies_only_new_wallpapers_and_preserves_spaced_path(self):
+        first = "/wallpapers/one with spaces.png"
+        second = "/wallpapers/two.png"
+        result = self.run_watcher(f"{first}\n{first}\n{second}\n", 3)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.call_lines(),
+            ["<wallpaper>", f"<{first}>", "<wallpaper>", f"<{second}>"],
+        )
+
+    def test_failed_and_empty_queries_leave_last_applied_wallpaper_unchanged(self):
+        first = "/wallpapers/one.png"
+        result = self.run_watcher(f"{first}\n__FAIL__\n\n{first}\n", 4)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.call_lines(), ["<wallpaper>", f"<{first}>"])
+
+    def test_failed_apply_is_retried_for_the_same_wallpaper(self):
+        image = "/wallpapers/one.png"
+        result = self.run_watcher(
+            f"{image}\n{image}\n",
+            2,
+            MATUGEN_NIRI_APPLY_FAILS=1,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.call_lines(),
+            ["<wallpaper>", f"<{image}>", "<wallpaper>", f"<{image}>"],
+        )
+
+    def test_exits_without_sync_when_niri_is_not_running(self):
+        result = self.run_watcher("/wallpapers/one.png\n", 1, PGREP_STATUS=1)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.call_lines(), [])
+
+    def test_terminates_cleanly_when_signaled(self):
+        sequence_file = self.base / "wallpaper-sequence.txt"
+        sequence_file.write_text("\n", encoding="utf-8")
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.tools}{os.pathsep}{env['PATH']}",
+                "WAYLAND_DISPLAY": "wayland-1",
+                "MATUGEN_NIRI_APPLY": str(self.apply),
+                "MATUGEN_NIRI_WATCH_INTERVAL": "0.1",
+                "MATUGEN_NIRI_WATCH_MAX_POLLS": "0",
+                "MATUGEN_NIRI_WATCH_SEQUENCE": str(sequence_file),
+                "MATUGEN_NIRI_QUERY_COUNT": str(self.query_count),
+                "MATUGEN_NIRI_APPLY_COUNT": str(self.apply_count),
+                "MATUGEN_NIRI_APPLY_CALLS": str(self.calls),
+            }
+        )
+        process = subprocess.Popen(
+            ["bash", str(WATCHER)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            time.sleep(0.2)
+            process.terminate()
+            _, stderr = process.communicate(timeout=3)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+
+        self.assertEqual(process.returncode, 0, stderr)
 
 
 if __name__ == "__main__":
