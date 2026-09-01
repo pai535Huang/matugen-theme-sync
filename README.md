@@ -63,16 +63,19 @@ matugen-theme-sync uninstall   # stop the service and remove what apply deployed
 matugen-theme-sync show-ui     # open the libadwaita GUI
 ```
 
-Options: `--de plasma|gnome|niri` to force a desktop, `--no-bootstrap` to apply without generating a theme, `--purge` to also remove `~/.config/matugen`.
+Options: `--de plasma|gnome|niri` forces a desktop, and `--no-bootstrap`
+applies support files without generating a theme. `--purge` is only available
+on `uninstall`; its Niri behavior is described below.
 
 ### Niri mode
 
 Niri has no compositor-wide wallpaper or light/dark switch, so this mode always
 generates Matugen in `dark` mode. It discovers the current image from the
-wallpaper daemon: JSON is tried first (`awww query --json`, invoked with the
-daemon's all-output option), followed by legacy `awww query` and `swww query`
-text output. If several outputs use different images, output names are sorted
-case-insensitively and the first valid output supplies the one global palette.
+wallpaper daemon with `awww query --all --json` first, reading all namespaces
+and their multi-output entries. Valid displayed images are sorted by the
+casefolded output name and then by image path; the first valid image supplies
+the one global palette. Legacy `awww query` and `swww query` text output are
+tried next.
 Normal startup/manual generation may fall back to the first image under
 `~/Pictures/Wallpapers` or `~/Pictures`; the watcher uses daemon results only.
 
@@ -86,8 +89,9 @@ automatically:
 
 - Niri receives a marked block at the end of `~/.config/niri/config.kdl` with
   `include "./colors.kdl"`. Because Niri includes are positional, the generated
-  layout colors override earlier focus-ring, border, shadow, tab-indicator,
-  overview, and recent-window colors.
+  fragment overrides earlier layout background, focus-ring, border, shadow,
+  tab-indicator, and insert-hint colors, plus the overview backdrop and
+  recent-window highlight colors.
 - Waybar receives a complete managed `~/.config/waybar/style.css` that loads
   generated `colors.css`. Its module configuration is left untouched.
 - Rofi receives the complete `themes/matugen.rasi` theme and a marked
@@ -119,12 +123,19 @@ the original Waybar/Rofi/Mako files, and removes files that were originally
 absent. The original snapshot therefore remains the stable restore point for
 the whole managed lifecycle.
 
+`matugen-theme-sync uninstall --de niri --purge` additionally deletes
+`~/.config/matugen` and `~/.cache/matugen-niri`. If `conflicts/` is empty, the
+Niri state root is removed too. A non-empty `conflicts/` archive keeps the state
+root and its archived edits, and uninstall prints the preserved archive path.
+
 For a support-files-only setup pass,
 `matugen-theme-sync apply --de niri --no-bootstrap` installs only the helper
-scripts, Matugen config/templates, and service unit.
-It does not create a backup or transaction, replace application themes, add
-managed blocks, reload applications, or enable the watcher: application theme
-takeover is zero until a normal apply.
+scripts, Matugen config/templates, and service unit. It does not create a new
+backup or transaction. It does not change the current application theme or watcher state.
+On a clean first install this is zero theme takeover; after an
+earlier managed apply it deliberately leaves the existing managed theme and
+watcher state in place rather than undoing them. Use `uninstall --de niri` to
+restore the originals and disable the watcher.
 
 Recovery commands:
 

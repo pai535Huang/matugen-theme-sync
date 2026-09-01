@@ -51,7 +51,7 @@ class DesktopDetectionTests(unittest.TestCase):
             ):
                 self.assertEqual(MODULE.detect_desktop(), expected)
 
-    def test_niri_dependency_report_separates_optional_apps(self):
+    def test_niri_dependency_report_accepts_awww_only(self):
         available = {
             "matugen": "/bin/matugen",
             "niri": "/bin/niri",
@@ -82,18 +82,43 @@ class DesktopDetectionTests(unittest.TestCase):
         self.assertEqual(required, ["swww/awww"])
         self.assertEqual(optional, ["makoctl", "waybar", "rofi"])
 
-    def test_plasma_and_gnome_dependency_reports_remain_satisfied(self):
-        available = {
+    def test_each_desktop_reports_each_missing_required_dependency(self):
+        all_tools = {
             "matugen": "/bin/matugen",
             "kreadconfig6": "/bin/kreadconfig6",
             "kwriteconfig6": "/bin/kwriteconfig6",
             "plasma-apply-colorscheme": "/bin/plasma-apply-colorscheme",
             "gsettings": "/bin/gsettings",
+            "niri": "/bin/niri",
+            "awww": "/bin/awww",
+            "swww": "/bin/swww",
+            "makoctl": "/bin/makoctl",
+            "waybar": "/bin/waybar",
+            "rofi": "/bin/rofi",
         }
-        with mock.patch.object(MODULE.shutil, "which", side_effect=available.get):
-            for desktop in (MODULE.DE_PLASMA, MODULE.DE_GNOME):
-                with self.subTest(desktop=desktop):
-                    self.assertEqual(MODULE.dependency_report(desktop), ([], []))
+        cases = (
+            (MODULE.DE_PLASMA, {"kreadconfig6"}, {"kreadconfig6"}),
+            (MODULE.DE_PLASMA, {"kwriteconfig6"}, {"kwriteconfig6"}),
+            (
+                MODULE.DE_PLASMA,
+                {"plasma-apply-colorscheme"},
+                {"plasma-apply-colorscheme"},
+            ),
+            (MODULE.DE_GNOME, {"gsettings"}, {"gsettings"}),
+            (MODULE.DE_NIRI, {"niri"}, {"niri"}),
+            (MODULE.DE_NIRI, {"awww", "swww"}, {"swww/awww"}),
+        )
+        for desktop, missing, expected in cases:
+            with self.subTest(desktop=desktop, missing=missing):
+                available = {
+                    tool: path for tool, path in all_tools.items() if tool not in missing
+                }
+                with mock.patch.object(
+                    MODULE.shutil, "which", side_effect=available.get
+                ):
+                    required, optional = MODULE.dependency_report(desktop)
+                self.assertSetEqual(set(required), expected)
+                self.assertEqual(optional, [])
 
     def test_dependency_output_reports_optional_apps_separately(self):
         output = io.StringIO()

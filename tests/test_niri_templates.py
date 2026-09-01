@@ -33,12 +33,35 @@ class NiriTemplateTest(unittest.TestCase):
             "Waybar",
             "Rofi",
             "Mako",
-            "awww query --json",
+            "awww query --all --json",
+            "all namespaces",
+            "casefolded output name",
+            "uninstall --de niri --purge",
+            "~/.cache/matugen-niri",
+            "non-empty `conflicts/`",
+            "does not change the current application theme or watcher state",
             "uninstall",
         ):
             with self.subTest(text=text):
                 self.assertIn(text, readme)
         self.assertNotIn('import "colors.kdl"', readme)
+        self.assertNotIn("`awww query --json`", readme)
+
+    def test_niri_template_comment_classifies_all_positional_overrides(self) -> None:
+        preamble = NIRI_KDL.split("layout {", 1)[0]
+        for text in (
+            "layout background-color",
+            "focus-ring",
+            "border",
+            "shadow",
+            "tab-indicator",
+            "insert-hint",
+            "overview backdrop-color",
+            "recent-windows highlight",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(text, preamble)
+        self.assertNotIn("layout sections", preamble)
 
     def test_static_niri_application_themes_are_portable(self) -> None:
         for source in (STATIC_WAYBAR, STATIC_ROFI, STATIC_MAKO):

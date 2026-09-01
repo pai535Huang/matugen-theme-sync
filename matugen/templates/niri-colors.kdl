@@ -4,9 +4,12 @@
 // Included by the managed block at the end of ~/.config/niri/config.kdl:
 //   include "./colors.kdl"
 //
-// Niri includes are positional. These layout sections therefore directly
-// override earlier focus-ring, border, shadow, tab-indicator, overview, and
-// recent-windows colors while leaving their non-color settings unchanged.
+// Niri includes are positional, so these values directly override earlier:
+// - layout background-color, focus-ring, border, shadow, tab-indicator, and
+//   insert-hint colors;
+// - overview backdrop-color; and
+// - recent-windows highlight colors.
+// Their non-color settings remain unchanged.
 // Reload after regeneration: niri msg action load-config-file
 
 layout {
