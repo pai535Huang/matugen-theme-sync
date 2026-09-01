@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Apply a dark Matugen theme for Niri (wayland compositor).
+#
+# Wallpaper source: `awww query` (swww renamed to awww) with a fallback to
+# `swww query`, then ~/Pictures/Wallpapers. Niri itself does not manage
+# wallpapers, so the wallpaper tool running in the session is queried.
+
+STATE_DIR="$HOME/.cache/matugen-niri"
+PALETTE_STATE="$STATE_DIR/last-palette.txt"
+THEME_STATE="$STATE_DIR/last-theme.txt"
+MATUGEN_CONFIG="$HOME/.config/matugen/config.toml"
+
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
+
+usage() {
+  printf 'Usage: %s [startup|wallpaper|scheme|manual] [--force] [--print-wallpaper] [WALLPAPER_PATH]\n' "${0##*/}" >&2
+}
+
+trigger="manual"
+force=0
+print_wallpaper=0
+image_arg=""
+for argument in "$@"; do
+  case "$argument" in
+    startup|wallpaper|scheme|manual) trigger="$argument" ;;
+    --force) force=1 ;;
+    --print-wallpaper) print_wallpaper=1 ;;
+    -*) usage; exit 2 ;;
+    *) image_arg="$argument" ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Wallpaper resolution
+# ---------------------------------------------------------------------------
+
+query_awww() {
+  command -v awww >/dev/null 2>&1 || return 1
+  awww query --all --json 2>/dev/null | python3 -c '
+import json
+import os
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, TypeError):
+    raise SystemExit(1)
+
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+
+candidates = []
+for namespace in payload.values():
+    if not isinstance(namespace, list):
+        continue
+    for output in namespace:
+        if not isinstance(output, dict):
+            continue
+        displaying = output.get("displaying")
+        image = displaying.get("image") if isinstance(displaying, dict) else None
+        if not isinstance(image, str) or not os.path.isfile(image):
+            continue
+        name = output.get("name", "")
+        candidates.append((name.casefold() if isinstance(name, str) else "", image))
+
+if not candidates:
+    raise SystemExit(1)
+
+candidates.sort()
+if len(candidates) > 1:
+    print(f"awww reports multiple wallpapers; selecting {candidates[0][1]}", file=sys.stderr)
+print(candidates[0][1])
+'
+}
+
+# `awww query` and older swww versions printed either `image:` or `path:`.
+# Keep the rest of the line intact because wallpaper paths may contain spaces.
+query_legacy() {
+  local tool="$1" output line path
+  command -v "$tool" >/dev/null 2>&1 || return 1
+  output="$("$tool" query 2>/dev/null || true)"
+  while IFS= read -r line; do
+    case "$line" in
+      *"image: "*) path="${line##*image: }" ;;
+      *"path: "*) path="${line##*path: }" ;;
+      *) continue ;;
+    esac
+    if [[ -f "$path" ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done <<< "$output"
+  return 1
+}
+
+query_swww() { query_legacy swww; }
+
+query_wallpaper() {
+  query_awww || query_legacy awww || query_swww
+}
+
+pick_fallback_wallpaper() {
+  find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" -maxdepth 2 -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.bmp' \) \
+    2>/dev/null | sort | head -n 1
+}
+
+if (( print_wallpaper )); then
+  image="$(query_wallpaper)" || exit 1
+  printf '%s\n' "$image"
+  exit 0
+fi
+
+mkdir -p "$STATE_DIR"
+exec 9>"$STATE_DIR/apply.lock"
+flock -x 9
+
+if [[ -n "$image_arg" ]]; then
+  image="$image_arg"
+else
+  image="$(query_wallpaper)" || image="$(pick_fallback_wallpaper)" || {
+    log "Could not resolve a wallpaper (no arg, awww/swww query failed, no fallback)"
+    exit 1
+  }
+fi
+
+if [[ ! -f "$image" ]]; then
+  log "Wallpaper file not found: $image"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Idempotency
+# ---------------------------------------------------------------------------
+
+input_id="$(sha256sum "$image" | cut -d' ' -f1)"
+definition_id="$(sha256sum "$MATUGEN_CONFIG" "$HOME/.config/matugen/templates/"* | sha256sum | cut -d' ' -f1)"
+palette_key="$input_id:$definition_id"
+theme_key="$palette_key:dark"
+
+palette_current=0
+theme_current=0
+[[ -f "$PALETTE_STATE" ]] && [[ "$(<"$PALETTE_STATE")" == "$palette_key" ]] && palette_current=1
+[[ -f "$THEME_STATE" ]] && [[ "$(<"$THEME_STATE")" == "$theme_key" ]] && theme_current=1
+
+required_outputs=(
+  "$HOME/.config/niri/colors.kdl"
+  "$HOME/.config/waybar/colors.css"
+  "$HOME/.config/rofi/colors.rasi"
+  "$HOME/.config/mako/colors"
+  "$HOME/.config/gtk-3.0/gtk.css"
+  "$HOME/.config/gtk-3.0/colors.css"
+  "$HOME/.config/gtk-4.0/gtk.css"
+  "$HOME/.config/gtk-4.0/colors.css"
+  "$HOME/.config/kitty/themes/Matugen.conf"
+  "$HOME/.config/nvim/colors/matugen.vim"
+  "$HOME/.config/btop/themes/matugen.theme"
+  "$HOME/.config/cava/themes/matugen"
+  "$HOME/.config/tmux/generated.conf"
+  "$HOME/.config/zellij/themes/matugen.kdl"
+  "$HOME/.config/matugen/themes/starship-colors.toml"
+  "$HOME/.config/yazi/theme.toml"
+  "$HOME/.config/matugen/themes/obsidian.css"
+)
+for output in "${required_outputs[@]}"; do
+  if [[ ! -f "$output" ]]; then
+    theme_current=0
+  fi
+done
+
+if (( ! force && palette_current && theme_current )); then
+  log "Wallpaper and dark mode unchanged; skipping theme regeneration"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Generate
+# ---------------------------------------------------------------------------
+
+if ! command -v matugen >/dev/null 2>&1; then
+  log "matugen is not installed (sudo pacman -S matugen)"
+  exit 1
+fi
+
+log "Generating dark theme from: $image"
+# scheme-vibrant gives saturated, distinguishable accent colors for the bar
+# and compositor; scheme-fidelity (used on Plasma) produces muted tones that
+# look flat in Waybar text.
+if ! matugen -c "$MATUGEN_CONFIG" image "$image" --mode dark --source-color-index 0 -t scheme-vibrant; then
+  log "matugen failed"
+  exit 1
+fi
+
+for output in "${required_outputs[@]}"; do
+  if [[ ! -f "$output" ]]; then
+    log "Expected generated file is missing: $output"
+    exit 1
+  fi
+done
+
+# Live reload of tools that read the generated files. niri/waybar/mako reload
+# via their config post_hooks; rofi picks the colors up on its next start.
+# Reload applications that read shared templates the same way the other
+# desktop scripts do.
+reload_kitty() {
+  pgrep -x kitty >/dev/null 2>&1 || return 0
+  if command -v kitty >/dev/null 2>&1 \
+    && kitty +kitten themes --reload-in=all Matugen >/dev/null 2>&1; then
+    return 0
+  fi
+  pkill -SIGUSR1 kitty 2>/dev/null
+}
+
+reload_nvim() {
+  pgrep -x nvim >/dev/null 2>&1 || return 0
+  pkill -SIGUSR1 nvim 2>/dev/null
+}
+
+reload_btop() {
+  pgrep -x btop >/dev/null 2>&1 || return 0
+  pkill -USR2 btop 2>/dev/null
+}
+
+reload_cava() {
+  pgrep -x cava >/dev/null 2>&1 || return 0
+  pkill -USR1 cava 2>/dev/null
+}
+
+reload_tmux() {
+  command -v tmux >/dev/null 2>&1 || return 0
+  tmux list-sessions >/dev/null 2>&1 || return 0
+  tmux source-file "$HOME/.config/tmux/generated.conf" >/dev/null 2>&1 || \
+    log "Could not reload tmux colors"
+}
+
+update_starship_palette() {
+  local generated="$HOME/.config/matugen/themes/starship-colors.toml"
+  local config="$HOME/.config/starship.toml"
+  local palette_block
+
+  [[ -f "$generated" && -f "$config" ]] || return 0
+  palette_block="$(awk '
+    /^\[palettes\.[^]]+\]/ { in_palette = 1; print; next }
+    in_palette && /^\[/ { exit }
+    in_palette && /^color[0-9]/ { print }
+  ' "$generated")"
+  [[ -n "$palette_block" ]] || return 0
+
+  awk -v new="$palette_block" '
+    BEGIN { in_block = 0; in_palette = 0 }
+    /^# BEGIN MATUGEN PALETTE$/ { in_block = 1; print; next }
+    /^# END MATUGEN PALETTE$/ { in_block = 0; print; next }
+    in_block && /^\[palettes\.[^]]+\]$/ {
+      in_palette = 1
+      print new
+      next
+    }
+    in_block && in_palette && /^\[/ { in_palette = 0 }
+    in_block && in_palette { next }
+    { print }
+  ' "$config" > "$config.tmp"
+  mv "$config.tmp" "$config"
+}
+
+sync_ok=1
+update_starship_palette || sync_ok=0
+reload_kitty || sync_ok=0
+reload_nvim || sync_ok=0
+reload_btop || sync_ok=0
+reload_cava || sync_ok=0
+reload_tmux || sync_ok=0
+
+printf '%s\n' "$palette_key" > "$PALETTE_STATE"
+if (( sync_ok )); then
+  printf '%s\n' "$theme_key" > "$THEME_STATE"
+else
+  log "Theme generated, but one or more live synchronization steps failed"
+  exit 1
+fi
+log "Applied Matugen dark theme"
