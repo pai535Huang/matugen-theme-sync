@@ -479,21 +479,26 @@ class NiriIntegrationTests(unittest.TestCase):
         ):
             self.manager.commit()
 
-        expected = {
+        expected_keys = (
             "niri-colors",
             "waybar-colors",
             "rofi-colors",
             "mako-colors",
-        }
-        synced = {
-            event.removeprefix("file:")
-            for event in events
-            if event.startswith("file:")
-        }
-        self.assertEqual(synced, expected)
-        for key in expected:
-            self.assertLess(events.index(f"file:{key}"), events.index("journal"))
-            self.assertLess(events.index(f"dir:{key}"), events.index("journal"))
+        )
+        self.assertEqual(
+            tuple(
+                key
+                for key, (_, kind) in MODULE.TARGETS.items()
+                if kind == "generated"
+            ),
+            expected_keys,
+        )
+        expected_events = [
+            event
+            for key in expected_keys
+            for event in (f"file:{key}", f"dir:{key}")
+        ] + ["journal"]
+        self.assertEqual(events, expected_events)
 
     def test_commit_rejects_missing_generated_target_before_journal(self):
         generated = self.write_generated_targets()
