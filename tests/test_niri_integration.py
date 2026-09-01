@@ -77,6 +77,7 @@ class NiriIntegrationTests(unittest.TestCase):
         (self.resources / "waybar").mkdir(parents=True)
         (self.resources / "rofi").mkdir()
         (self.resources / "mako").mkdir()
+        (self.resources / "gtk").mkdir()
         (self.resources / "waybar/style.css").write_text(
             '@import url("@MATUGEN_WAYBAR_COLORS@");\n', encoding="utf-8"
         )
@@ -85,6 +86,9 @@ class NiriIntegrationTests(unittest.TestCase):
         )
         (self.resources / "mako/config").write_text(
             "include=@MATUGEN_MAKO_COLORS@\n", encoding="utf-8"
+        )
+        (self.resources / "gtk/gtk-import.css").write_text(
+            "@import 'colors.css';\n", encoding="utf-8"
         )
         self.manager = MODULE.NiriIntegration(
             self.home,
@@ -717,6 +721,10 @@ class NiriIntegrationTests(unittest.TestCase):
             "waybar-colors",
             "rofi-colors",
             "mako-colors",
+            "gtk3-colors",
+            "gtk4-colors",
+            "qt5ct-colors",
+            "qt6ct-colors",
         )
         self.assertEqual(
             tuple(
@@ -732,6 +740,25 @@ class NiriIntegrationTests(unittest.TestCase):
             for event in (f"file:{key}", f"dir:{key}")
         ] + ["journal"]
         self.assertEqual(events, expected_events)
+
+    def test_targets_include_gtk_and_qt(self):
+        targets = MODULE.TARGETS
+        self.assertEqual(targets["gtk3-import"], (".config/gtk-3.0/gtk.css", "static"))
+        self.assertEqual(
+            targets["gtk3-colors"], (".config/gtk-3.0/colors.css", "generated")
+        )
+        self.assertEqual(targets["gtk4-import"], (".config/gtk-4.0/gtk.css", "static"))
+        self.assertEqual(
+            targets["gtk4-colors"], (".config/gtk-4.0/colors.css", "generated")
+        )
+        self.assertEqual(
+            targets["qt5ct-colors"], (".config/qt5ct/colors/matugen.conf", "generated")
+        )
+        self.assertEqual(
+            targets["qt6ct-colors"], (".config/qt6ct/colors/matugen.conf", "generated")
+        )
+        self.assertEqual(MODULE.STATIC_SOURCES["gtk3-import"], "gtk/gtk-import.css")
+        self.assertEqual(MODULE.STATIC_SOURCES["gtk4-import"], "gtk/gtk-import.css")
 
     def test_commit_rejects_missing_generated_target_before_journal(self):
         generated = self.write_generated_targets()

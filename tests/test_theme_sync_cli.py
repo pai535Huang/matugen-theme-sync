@@ -258,6 +258,7 @@ class NiriCommandTests(unittest.TestCase):
             ("waybar/style.css", '@import url("@MATUGEN_WAYBAR_COLORS@");\n'),
             ("rofi/matugen.rasi", '@import "../colors.rasi"\n'),
             ("mako/config", "include=@MATUGEN_MAKO_COLORS@\n"),
+            ("gtk/gtk-import.css", "@import 'colors.css';\n"),
         ):
             target = self.niri_resources / relative
             target.parent.mkdir(parents=True, exist_ok=True)

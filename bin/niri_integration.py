@@ -31,12 +31,20 @@ TARGETS = {
     "rofi-colors": (".config/rofi/colors.rasi", "generated"),
     "mako-config": (".config/mako/config", "static"),
     "mako-colors": (".config/mako/colors", "generated"),
+    "gtk3-import": (".config/gtk-3.0/gtk.css", "static"),
+    "gtk3-colors": (".config/gtk-3.0/colors.css", "generated"),
+    "gtk4-import": (".config/gtk-4.0/gtk.css", "static"),
+    "gtk4-colors": (".config/gtk-4.0/colors.css", "generated"),
+    "qt5ct-colors": (".config/qt5ct/colors/matugen.conf", "generated"),
+    "qt6ct-colors": (".config/qt6ct/colors/matugen.conf", "generated"),
 }
 
 STATIC_SOURCES = {
     "waybar-style": "waybar/style.css",
     "rofi-theme": "rofi/matugen.rasi",
     "mako-config": "mako/config",
+    "gtk3-import": "gtk/gtk-import.css",
+    "gtk4-import": "gtk/gtk-import.css",
 }
 
 INHERITED_LOCK_FD_ENV = "MATUGEN_NIRI_INHERITED_LOCK_FD"
