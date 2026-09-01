@@ -11,3 +11,6 @@ __pycache__/
 
 # AI related documents
 docs/
+
+# Git worktrees
+.worktrees/
