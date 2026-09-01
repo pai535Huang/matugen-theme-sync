@@ -251,6 +251,7 @@ done <<< "$REQUIRED_OUTPUTS"
             "MATUGEN_ARGS": self.args_file,
             "MATUGEN_SKIP_OUTPUT": skipped,
             "MATUGEN_STATUS": "0",
+            "MATUGEN_NIRI_NO_RELOAD": "1",
             "REQUIRED_OUTPUTS": "\n".join(REQUIRED_OUTPUTS),
         }
 
@@ -303,6 +304,47 @@ done <<< "$REQUIRED_OUTPUTS"
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse((self.home / ".cache/matugen-niri/last-theme.txt").exists())
+
+    def test_no_reload_skips_live_side_effects(self):
+        # A fake `waybar` in the test PATH records whether it was spawned;
+        # with MATUGEN_NIRI_NO_RELOAD=1 the apply must not restart it.
+        side_effects = self.base / "side-effects.txt"
+        self.write_tool(
+            "waybar",
+            f"#!/usr/bin/env bash\nprintf '%s\\n' waybar >> {side_effects}\n",
+        )
+        result = self.run_script(
+            "manual",
+            str(self.spaced),
+            **self.generation_env(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(
+            (self.home / ".cache/matugen-niri/last-theme.txt").is_file()
+        )
+        self.assertFalse(
+            side_effects.exists(),
+            "MATUGEN_NIRI_NO_RELOAD=1 must skip live waybar restarts",
+        )
+
+    def test_no_reload_skips_gsettings_when_disabled(self):
+        # With NO_RELOAD unset, reload_gtk runs gsettings; the fake tool
+        # records it so the test does not touch the real session bus.
+        side_effects = self.base / "side-effects.txt"
+        self.write_tool(
+            "gsettings",
+            f"#!/usr/bin/env bash\nprintf '%s\\n' gsettings >> {side_effects}\n",
+        )
+        result = self.run_script(
+            "manual",
+            str(self.spaced),
+            **self.generation_env(),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(
+            side_effects.exists(),
+            "MATUGEN_NIRI_NO_RELOAD=1 must skip gsettings writes",
+        )
 
     def test_manual_apply_discards_failed_json_stdout_before_legacy_fallback(self):
         result = self.run_script(
@@ -694,6 +736,7 @@ done <<< "$REQUIRED_OUTPUTS"
                     {"": [{"name": "eDP-1", "displaying": {"image": str(image)}}]}
                 ),
                 "MATUGEN_ARGS": str(args_file),
+                "MATUGEN_NIRI_NO_RELOAD": "1",
                 "REQUIRED_OUTPUTS": "\n".join(REQUIRED_OUTPUTS),
             }
         )
