@@ -140,6 +140,19 @@ class NiriIntegration:
         finally:
             os.close(descriptor)
 
+    @staticmethod
+    def _fsync_file(path: Path) -> None:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise IntegrationError(
+                    f"managed target is not a regular file: {path}"
+                )
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
     @classmethod
     def _durable_mkdir(cls, path: Path) -> None:
         path = Path(path)
@@ -257,6 +270,19 @@ class NiriIntegration:
                     raise IntegrationError(f"managed path is a symlink: {component}")
                 if not component.exists():
                     break
+
+    def _sync_generated_targets(self) -> None:
+        self._assert_safe_targets()
+        for key, (_, kind) in TARGETS.items():
+            if kind != "generated":
+                continue
+            target = self._target_path(key)
+            if not target.exists() or not target.is_file():
+                raise IntegrationError(
+                    f"managed target is not a regular file: {target}"
+                )
+            self._fsync_file(target)
+            self._fsync_directory(target.parent)
 
     def _snapshot_target(self, key: str, directory: Path) -> dict[str, object]:
         target = self._target_path(key)
@@ -538,6 +564,7 @@ class NiriIntegration:
                     and not transaction_metadata[key].get("exists")
                 ):
                     entry["restore_original_on_uninstall"] = True
+            self._sync_generated_targets()
             self._atomic_write(
                 self.committed_manifest_path,
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n",

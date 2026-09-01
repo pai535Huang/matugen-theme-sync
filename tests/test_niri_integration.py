@@ -98,10 +98,24 @@ class NiriIntegrationTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
+    def write_generated_targets(self, suffix="original"):
+        return {
+            key: self.write(relative, f"{key}-{suffix}\n")
+            for key, (relative, kind) in MODULE.TARGETS.items()
+            if kind == "generated"
+        }
+
+    def write_missing_generated_targets(self):
+        for key, (relative, kind) in MODULE.TARGETS.items():
+            target = self.home / relative
+            if kind == "generated" and not target.exists():
+                self.write(relative, f"{key}-generated\n")
+
     def apply_and_commit(self):
         self.manager.begin()
         self.manager.deploy_static()
         self.manager.activate()
+        self.write_missing_generated_targets()
         self.manager.commit()
 
     def assert_lifecycle_lock_available(self):
@@ -207,6 +221,7 @@ class NiriIntegrationTests(unittest.TestCase):
 
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         self.manager.commit()
         self.manager.restore()
 
@@ -251,6 +266,7 @@ class NiriIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(absent.read_bytes(), b"")
         self.assertEqual(stat.S_IMODE(absent.stat().st_mode), 0o644)
+        self.write_missing_generated_targets()
         self.manager.commit()
         self.manager.restore()
         self.assertEqual(style.read_text(encoding="utf-8"), "immutable-original\n")
@@ -384,6 +400,7 @@ class NiriIntegrationTests(unittest.TestCase):
     def test_commit_fsyncs_cleanup_before_removing_recovery_journal(self):
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         events = []
         real_fsync = MODULE.os.fsync
         real_rmtree = MODULE.shutil.rmtree
@@ -428,9 +445,129 @@ class NiriIntegrationTests(unittest.TestCase):
         self.assertLess(cleanup_sync, journal_unlink)
         self.assertLess(journal_unlink, journal_sync)
 
+    def test_commit_syncs_generated_targets_before_publishing_journal(self):
+        generated = self.write_generated_targets()
+        self.manager.begin()
+        events = []
+        real_fsync_file = getattr(self.manager, "_fsync_file", lambda path: None)
+        real_fsync_directory = self.manager._fsync_directory
+        real_atomic_write = self.manager._atomic_write
+        keys_by_path = {path: key for key, path in generated.items()}
+        keys_by_parent = {path.parent: key for key, path in generated.items()}
+
+        def record_file(path):
+            events.append(f"file:{keys_by_path[Path(path)]}")
+            return real_fsync_file(path)
+
+        def record_directory(path):
+            path = Path(path)
+            if path in keys_by_parent:
+                events.append(f"dir:{keys_by_parent[path]}")
+            return real_fsync_directory(path)
+
+        def record_atomic_write(path, data, mode=0o644):
+            if Path(path) == self.manager.committed_manifest_path:
+                events.append("journal")
+            return real_atomic_write(path, data, mode)
+
+        with patch.object(
+            self.manager, "_fsync_file", side_effect=record_file, create=True
+        ), patch.object(
+            self.manager, "_fsync_directory", side_effect=record_directory
+        ), patch.object(
+            self.manager, "_atomic_write", side_effect=record_atomic_write
+        ):
+            self.manager.commit()
+
+        expected = {
+            "niri-colors",
+            "waybar-colors",
+            "rofi-colors",
+            "mako-colors",
+        }
+        synced = {
+            event.removeprefix("file:")
+            for event in events
+            if event.startswith("file:")
+        }
+        self.assertEqual(synced, expected)
+        for key in expected:
+            self.assertLess(events.index(f"file:{key}"), events.index("journal"))
+            self.assertLess(events.index(f"dir:{key}"), events.index("journal"))
+
+    def test_commit_rejects_missing_generated_target_before_journal(self):
+        generated = self.write_generated_targets()
+        self.manager.begin()
+        generated["niri-colors"].unlink()
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.commit()
+
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertTrue(self.manager.transaction.is_dir())
+        self.manager.rollback()
+
+    def test_commit_rejects_generated_symlink_before_journal(self):
+        generated = self.write_generated_targets()
+        self.manager.begin()
+        target = generated["waybar-colors"]
+        target.unlink()
+        target.symlink_to(generated["niri-colors"])
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.commit()
+
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertTrue(self.manager.transaction.is_dir())
+        target.unlink()
+        self.manager.rollback()
+
+    def test_commit_rejects_non_regular_generated_target_before_journal(self):
+        generated = self.write_generated_targets()
+        self.manager.begin()
+        target = generated["rofi-colors"]
+        target.unlink()
+        target.mkdir()
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.commit()
+
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertTrue(self.manager.transaction.is_dir())
+        target.rmdir()
+        self.manager.rollback()
+
+    def test_generated_sync_failure_remains_rollbackable(self):
+        generated = self.write_generated_targets()
+        original = {
+            key: path.read_text(encoding="utf-8")
+            for key, path in generated.items()
+        }
+        self.manager.begin()
+        for key, path in generated.items():
+            path.write_text(f"{key}-generated\n", encoding="utf-8")
+
+        with patch.object(
+            self.manager,
+            "_fsync_file",
+            side_effect=OSError("injected generated file fsync failure"),
+            create=True,
+        ):
+            with self.assertRaises(OSError):
+                self.manager.commit()
+
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertTrue(self.manager.transaction.is_dir())
+        self.manager.rollback()
+        self.assertEqual(
+            {key: path.read_text(encoding="utf-8") for key, path in generated.items()},
+            original,
+        )
+
     def test_commit_recovers_directory_fsync_failure_before_journal_removal(self):
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         real_fsync = MODULE.os.fsync
         real_rmtree = MODULE.shutil.rmtree
         failed_once = False
@@ -543,6 +680,7 @@ manager.rollback()
         self.assert_lifecycle_lock_available()
 
         self.manager.begin()
+        self.write_missing_generated_targets()
         self.manager.commit()
         self.assert_lifecycle_lock_available()
         self.manager.restore()
@@ -559,6 +697,7 @@ manager.rollback()
         style = self.write(".config/waybar/style.css", "original\n")
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         deployed = style.read_bytes()
         expected_checksum = hashlib.sha256(deployed).hexdigest()
         real_replace = MODULE.os.replace
@@ -595,6 +734,7 @@ manager.rollback()
     def test_commit_recovers_one_post_journal_cleanup_failure(self):
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         cleanup = self.manager.committed_cleanup_path
         real_rmtree = MODULE.shutil.rmtree
         failed_once = False
@@ -621,6 +761,7 @@ manager.rollback()
         style = self.write(".config/waybar/style.css", "original\n")
         self.manager.begin()
         self.manager.deploy_static()
+        self.write_missing_generated_targets()
         deployed = style.read_bytes()
         expected_checksum = hashlib.sha256(deployed).hexdigest()
         transactions = self.manager.root / "transactions"
@@ -738,6 +879,7 @@ manager.rollback()
         self.manager.begin()
         generated.write_text("first-generated\n", encoding="utf-8")
         self.manager.activate()
+        self.write_missing_generated_targets()
         self.manager.commit()
         self.manager.begin()
         generated.write_text("user-generated-edit\n", encoding="utf-8")
@@ -801,6 +943,7 @@ manager.rollback()
         self.manager.deploy_static()
         generated = self.write(".config/niri/colors.kdl", "generated\n")
         self.manager.activate()
+        self.write_missing_generated_targets()
         self.manager.commit()
         niri.write_text(
             niri.read_text(encoding="utf-8") + "// later-niri-edit\n",

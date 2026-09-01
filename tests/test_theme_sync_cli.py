@@ -565,10 +565,20 @@ class NiriCommandTests(unittest.TestCase):
 
         output = io.StringIO()
         integration_module = sys.modules[MODULE.NiriIntegration.__module__]
+
+        def generate_colors(*args, **kwargs):
+            for relative, kind in integration_module.TARGETS.values():
+                if kind != "generated":
+                    continue
+                target = self.home / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("generated\n", encoding="utf-8")
+            return 0
+
         with mock.patch.object(
             MODULE, "NiriIntegration", return_value=manager
         ), mock.patch.object(
-            MODULE, "stream", return_value=0
+            MODULE, "stream", side_effect=generate_colors
         ), mock.patch.object(
             MODULE, "install_service", side_effect=enable
         ), mock.patch.object(
