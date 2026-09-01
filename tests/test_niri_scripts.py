@@ -306,6 +306,76 @@ done <<< "$REQUIRED_OUTPUTS"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"<{self.spaced}>\n", self.args_file.read_text(encoding="utf-8"))
 
+    def test_empty_and_relative_state_home_use_the_default_lifecycle_lock(self):
+        flock_log = self.base / "flock-paths.txt"
+        release = self.base / "release-flock"
+        self.write_tool(
+            "flock",
+            """#!/usr/bin/env bash
+if [[ "$1" == "-x" && "$2" == "8" ]]; then
+  readlink "/proc/$PPID/fd/8" >> "$MATUGEN_FLOCK_LOG"
+  while [[ ! -e "$MATUGEN_FLOCK_RELEASE" ]]; do
+    sleep 0.01
+  done
+fi
+""",
+        )
+        expected = self.home / ".local/state/matugen-theme-sync/niri.lock"
+        working_directories = (self.base / "first-cwd", self.base / "second-cwd")
+        for directory in working_directories:
+            directory.mkdir()
+
+        for state_home in ("", "relative-state"):
+            with self.subTest(state_home=state_home):
+                flock_log.unlink(missing_ok=True)
+                release.unlink(missing_ok=True)
+                for directory in working_directories:
+                    env = os.environ.copy()
+                    env.update(
+                        {
+                            "HOME": str(self.home),
+                            "PATH": f"{self.tools}{os.pathsep}{env['PATH']}",
+                            "XDG_RUNTIME_DIR": str(self.base / "runtime"),
+                            "XDG_STATE_HOME": state_home,
+                            "MATUGEN_FLOCK_LOG": str(flock_log),
+                            "MATUGEN_FLOCK_RELEASE": str(release),
+                            **{
+                                key: str(value)
+                                for key, value in self.generation_env().items()
+                            },
+                        }
+                    )
+                    process = subprocess.Popen(
+                        ["bash", str(SCRIPT), "manual", "--force", str(self.spaced)],
+                        cwd=directory,
+                        env=env,
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    try:
+                        for _ in range(30):
+                            if flock_log.exists():
+                                break
+                            time.sleep(0.05)
+                        self.assertTrue(flock_log.exists(), "flock did not receive fd 8")
+                        self.assertEqual(
+                            flock_log.read_text(encoding="utf-8").splitlines(),
+                            [str(expected)],
+                        )
+                        release.touch()
+                        stdout, stderr = process.communicate(timeout=3)
+                        self.assertEqual(process.returncode, 0, stdout + stderr)
+                    finally:
+                        release.touch()
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate()
+                self.assertEqual(
+                    flock_log.read_text(encoding="utf-8").splitlines(),
+                    [str(expected), str(expected)],
+                )
+
     def test_normal_generation_waits_for_the_shared_lifecycle_lock(self):
         lock = self.base / "state/matugen-theme-sync/niri.lock"
         lock.parent.mkdir(parents=True)

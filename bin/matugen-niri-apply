@@ -11,7 +11,10 @@ STATE_DIR="$HOME/.cache/matugen-niri"
 PALETTE_STATE="$STATE_DIR/last-palette.txt"
 THEME_STATE="$STATE_DIR/last-theme.txt"
 MATUGEN_CONFIG="$HOME/.config/matugen/config.toml"
-STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+case "${XDG_STATE_HOME-}" in
+  /*) STATE_HOME="$XDG_STATE_HOME" ;;
+  *) STATE_HOME="$HOME/.local/state" ;;
+esac
 LIFECYCLE_LOCK="$STATE_HOME/matugen-theme-sync/niri.lock"
 INHERITED_LOCK_FD_ENV="MATUGEN_NIRI_INHERITED_LOCK_FD"
 

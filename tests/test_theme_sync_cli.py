@@ -2,6 +2,7 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
+import os
 import sys
 import tempfile
 import unittest
@@ -184,6 +185,45 @@ class FakeNiriIntegration:
         self.calls.append("restore")
 
 
+class StateHomeResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        self.home = self.base / "home"
+        self.cwd = self.base / "working-directory"
+        self.cwd.mkdir()
+
+    def test_resolve_state_home_falls_back_for_unset_empty_and_relative_values(self):
+        expected = self.home / ".local/state"
+        cases = (
+            ("unset", None),
+            ("empty", ""),
+            ("relative", "relative-state"),
+        )
+        previous_cwd = Path.cwd()
+        try:
+            os.chdir(self.cwd)
+            for name, value in cases:
+                environment = {"HOME": str(self.home)}
+                if value is not None:
+                    environment["XDG_STATE_HOME"] = value
+                with self.subTest(value=name), mock.patch.object(
+                    MODULE, "HOME", self.home
+                ), mock.patch.dict(MODULE.os.environ, environment, clear=True):
+                    self.assertEqual(MODULE.resolve_state_home(), expected)
+        finally:
+            os.chdir(previous_cwd)
+
+    def test_resolve_state_home_preserves_an_absolute_value(self):
+        with mock.patch.object(MODULE, "HOME", self.home), mock.patch.dict(
+            MODULE.os.environ,
+            {"HOME": str(self.home), "XDG_STATE_HOME": "/tmp/custom-state"},
+            clear=True,
+        ):
+            self.assertEqual(MODULE.resolve_state_home(), Path("/tmp/custom-state"))
+
+
 class NiriCommandTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -262,6 +302,7 @@ class NiriCommandTests(unittest.TestCase):
         service_result=True,
         service_exception=None,
         disable_exception=None,
+        integration_class=FakeNiriIntegration,
     ):
         def bootstrap_call(command, **kwargs):
             self.calls.append("bootstrap")
@@ -282,7 +323,7 @@ class NiriCommandTests(unittest.TestCase):
 
         with contextlib.ExitStack() as stack:
             stack.enter_context(
-                mock.patch.object(MODULE, "NiriIntegration", FakeNiriIntegration)
+                mock.patch.object(MODULE, "NiriIntegration", integration_class)
             )
             stack.enter_context(
                 mock.patch.object(MODULE, "stream", side_effect=bootstrap_call)
@@ -316,6 +357,42 @@ class NiriCommandTests(unittest.TestCase):
                     self.fail(f"cmd_apply leaked an exception: {exc}")
             self.apply_output = output.getvalue()
             return result
+
+    def test_empty_state_home_uses_the_same_absolute_root_for_apply_and_uninstall(self):
+        received_state_homes = []
+
+        class RecordingIntegration(FakeNiriIntegration):
+            def __init__(self, home, state_home, resources):
+                received_state_homes.append(state_home)
+                super().__init__(home, state_home, resources)
+
+        with mock.patch.dict(
+            MODULE.os.environ,
+            {
+                "HOME": str(self.home),
+                "PATH": str(self.home / ".local/bin"),
+                "XDG_STATE_HOME": "",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                self.run_apply(integration_class=RecordingIntegration), 0
+            )
+            with mock.patch.object(
+                MODULE, "NiriIntegration", RecordingIntegration
+            ), mock.patch.object(
+                MODULE, "disable_service"
+            ), mock.patch.object(
+                MODULE, "detect_session_type", return_value="wayland"
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    MODULE.cmd_uninstall(force_de=MODULE.DE_NIRI), 0
+                )
+
+        self.assertEqual(
+            received_state_homes,
+            [self.home / ".local/state", self.home / ".local/state"],
+        )
 
     def test_niri_apply_runs_transaction_in_exact_order(self):
         result = self.run_apply()

@@ -87,6 +87,16 @@ TEMPLATES_DIR = MATUGEN_DIR / "templates"
 SYSTEMD_DIR = resource_root() / "systemd"
 NIRI_RESOURCES_DIR = resource_root() / "niri"
 
+
+def resolve_state_home() -> Path:
+    value = os.environ.get("XDG_STATE_HOME")
+    if value:
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate
+    return HOME / ".local/state"
+
+
 # ---------------------------------------------------------------------------
 # Terminal output helpers
 # ---------------------------------------------------------------------------
@@ -381,7 +391,7 @@ def cmd_apply(force_de=None, bootstrap=True):
         return 1
 
     if de == DE_NIRI:
-        state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+        state_home = resolve_state_home()
         manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
         transaction_started = False
         service_attempted = False
@@ -457,7 +467,7 @@ def cmd_uninstall(force_de=None, purge=False):
 
     manager = None
     if de == DE_NIRI:
-        state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+        state_home = resolve_state_home()
         manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
         try:
             manager.restore()
