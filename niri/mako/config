@@ -1,0 +1,26 @@
+anchor=top-right
+layer=overlay
+width=360
+default-timeout=5000
+sort=-time
+group-by=summary,app-name
+max-visible=5
+font=JetBrains Mono Nerd Font 10
+markup=true
+border-size=1
+border-radius=8
+margin=8
+padding=10
+include=@MATUGEN_MAKO_COLORS@
+
+[urgency=critical]
+default-timeout=0
+
+[urgency=low]
+default-timeout=3000
+
+[app-name="kdeconnectd"]
+default-timeout=0
+
+[mode=do-not-disturb]
+invisible=1

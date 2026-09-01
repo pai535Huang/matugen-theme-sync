@@ -1,0 +1,93 @@
+[config]
+
+[templates.gtk3_import]
+input_path = "~/.config/matugen/templates/gtk-import.css"
+output_path = "~/.config/gtk-3.0/gtk.css"
+
+[templates.gtk3]
+input_path = "~/.config/matugen/templates/gtk-colors.css"
+output_path = "~/.config/gtk-3.0/colors.css"
+
+[templates.gtk4]
+input_path = "~/.config/matugen/templates/gtk4-colors.css"
+output_path = "~/.config/gtk-4.0/colors.css"
+
+[templates.gtk4_import]
+input_path = "~/.config/matugen/templates/gtk-import.css"
+output_path = "~/.config/gtk-4.0/gtk.css"
+
+[templates.gnome_shell]
+input_path = "~/.config/matugen/templates/gnome-shell-dark.css"
+input_path_modes = { light = "~/.config/matugen/templates/gnome-shell-light.css", dark = "~/.config/matugen/templates/gnome-shell-dark.css" }
+output_path = "~/.themes/Matugen/gnome-shell/gnome-shell.css"
+
+[templates.kitty]
+input_path = "~/.config/matugen/templates/kitty-colors-dark.conf"
+input_path_modes = { light = "~/.config/matugen/templates/kitty-colors-light.conf", dark = "~/.config/matugen/templates/kitty-colors-dark.conf" }
+output_path = "~/.config/kitty/themes/Matugen.conf"
+
+[templates.nvim]
+input_path = "~/.config/matugen/templates/nvim-colors-dark.vim"
+input_path_modes = { light = "~/.config/matugen/templates/nvim-colors-light.vim", dark = "~/.config/matugen/templates/nvim-colors-dark.vim" }
+output_path = "~/.config/nvim/colors/matugen.vim"
+
+[templates.btop]
+input_path = "~/.config/matugen/templates/btop.theme"
+output_path = "~/.config/btop/themes/matugen.theme"
+
+[templates.cava]
+input_path = "~/.config/matugen/templates/cava-colors-dark.ini"
+input_path_modes = { light = "~/.config/matugen/templates/cava-colors-light.ini", dark = "~/.config/matugen/templates/cava-colors-dark.ini" }
+output_path = "~/.config/cava/themes/matugen"
+
+[templates.tmux]
+input_path = "~/.config/matugen/templates/tmux-colors.conf"
+output_path = "~/.config/tmux/generated.conf"
+
+[templates.zellij]
+input_path = "~/.config/matugen/templates/zellij-theme.kdl.tera"
+output_path = "~/.config/zellij/themes/matugen.kdl"
+
+[templates.starship]
+input_path = "~/.config/matugen/templates/starship-colors.toml"
+output_path = "~/.config/matugen/themes/starship-colors.toml"
+
+[templates.yazi]
+input_path = "~/.config/matugen/templates/yazi-theme.toml"
+output_path = "~/.config/yazi/theme.toml"
+
+[templates.obsidian]
+input_path = "~/.config/matugen/templates/obsidian.css"
+output_path = "~/.config/matugen/themes/obsidian.css"
+
+[templates.qt5ct]
+input_path = "~/.config/matugen/templates/qtct-colors.conf"
+output_path = "~/.config/qt5ct/colors/matugen.conf"
+
+[templates.qt6ct]
+input_path = "~/.config/matugen/templates/qtct-colors.conf"
+output_path = "~/.config/qt6ct/colors/matugen.conf"
+
+[templates.pywalfox]
+input_path = "~/.config/matugen/templates/pywalfox-colors.json"
+output_path = "~/.cache/wal/colors.json"
+post_hook = "pywalfox update >/dev/null 2>&1 || true"
+
+[templates.niri]
+input_path = "~/.config/matugen/templates/niri-colors.kdl"
+output_path = "~/.config/niri/colors.kdl"
+post_hook = "niri msg action load-config-file 2>/dev/null || true"
+
+[templates.waybar]
+input_path = "~/.config/matugen/templates/waybar-colors.css"
+output_path = "~/.config/waybar/colors.css"
+post_hook = "pkill -SIGUSR2 waybar 2>/dev/null || true"
+
+[templates.rofi]
+input_path = "~/.config/matugen/templates/rofi-colors.rasi"
+output_path = "~/.config/rofi/colors.rasi"
+
+[templates.mako]
+input_path = "~/.config/matugen/templates/mako-colors"
+output_path = "~/.config/mako/colors"
+post_hook = "makoctl reload 2>/dev/null || true"

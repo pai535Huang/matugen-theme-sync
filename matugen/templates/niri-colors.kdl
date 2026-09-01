@@ -1,0 +1,49 @@
+// Niri colors
+// Generated with Matugen
+//
+// Import in ~/.config/niri/config.kdl:
+//   import "colors.kdl";
+//
+// Then reference e.g. colors.background in your config (see the Niri wiki).
+// Reload after regeneration: niri msg action load-config-file
+
+layout {
+	background-color "{{colors.background.default.hex}}"
+
+	focus-ring {
+		active-gradient from="{{colors.primary.default.hex}}" to="{{colors.tertiary.default.hex}}" angle=135
+		inactive-color "{{colors.outline.default.hex}}"
+		urgent-color "{{colors.error.default.hex}}"
+	}
+
+	border {
+		active-color "{{colors.primary.default.hex}}"
+		inactive-color "{{colors.outline.default.hex}}"
+		urgent-color "{{colors.error.default.hex}}"
+	}
+
+	shadow {
+		color "{{colors.shadow.default.hex}}70"
+	}
+
+	tab-indicator {
+		active-color "{{colors.primary.default.hex}}"
+		inactive-color "{{colors.outline.default.hex}}"
+		urgent-color "{{colors.error.default.hex}}"
+	}
+
+	insert-hint {
+		color "{{colors.primary.default.hex}}80"
+	}
+}
+
+overview {
+	backdrop-color "{{colors.background.default.hex}}"
+}
+
+recent-windows {
+	highlight {
+		active-color "{{colors.primary.default.hex}}"
+		urgent-color "{{colors.error.default.hex}}"
+	}
+}

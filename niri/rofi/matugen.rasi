@@ -1,0 +1,135 @@
+@import "../colors.rasi"
+
+* {
+    background: @surface-container;
+    background-alt: @surface-container-high;
+    foreground: @on-surface;
+    foreground-muted: @on-surface-variant;
+    accent: @primary;
+    urgent: @error;
+}
+
+window {
+    background-color: @surface-container;
+    border: 1px;
+    border-color: @outline-variant;
+    border-radius: 12px;
+    text-color: @on-surface;
+}
+
+mainbox {
+    background-color: @surface-container;
+    children: [ inputbar, message, listview, mode-switcher ];
+    spacing: 8px;
+}
+
+inputbar {
+    background-color: @surface-container;
+    children: [ prompt, entry, case-indicator ];
+    orientation: horizontal;
+    spacing: 6px;
+}
+
+prompt {
+    background-color: @surface-container-low;
+    padding: 6px 10px;
+    text-color: @primary;
+}
+
+entry {
+    background-color: @surface-container-low;
+    border-radius: 8px;
+    padding: 6px 10px;
+    text-color: @on-surface;
+}
+
+case-indicator {
+    background-color: @surface-container-low;
+    padding: 6px 10px;
+    text-color: @on-surface-variant;
+}
+
+message {
+    background-color: @surface-container-high;
+    padding: 6px 10px;
+    text-color: @on-surface;
+}
+
+listview {
+    background-color: @surface-container;
+    columns: 1;
+    lines: 12;
+    text-color: @on-surface;
+}
+
+mode-switcher {
+    background-color: @surface-container-low;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+mode-switcher button {
+    padding: 4px;
+    text-color: @on-surface;
+}
+
+mode-switcher button.selected {
+    background-color: @primary-container;
+    text-color: @on-primary-container;
+}
+
+element {
+    background-color: @surface-container;
+    border-radius: 8px;
+    padding: 5px 10px;
+    text-color: @on-surface;
+}
+
+element selected.normal {
+    background-color: @primary-container;
+    text-color: @on-primary-container;
+}
+
+element selected.active {
+    background-color: @tertiary-container;
+    text-color: @on-tertiary-container;
+}
+
+element selected.urgent {
+    background-color: @error-container;
+    text-color: @on-error-container;
+}
+
+element alternate.normal {
+    background-color: @surface-container-low;
+    text-color: @on-surface;
+}
+
+element alternate.active {
+    background-color: @tertiary-container;
+    text-color: @on-tertiary-container;
+}
+
+element alternate.urgent {
+    background-color: @error-container;
+    text-color: @on-error-container;
+}
+
+element-text {
+    background-color: transparent;
+    text-color: inherit;
+}
+
+element-icon {
+    background-color: transparent;
+    size: 20px;
+}
+
+scrollbar {
+    background-color: @surface-container;
+    handle-color: @primary;
+}
+
+scrollbar handle {
+    background-color: @primary;
+}

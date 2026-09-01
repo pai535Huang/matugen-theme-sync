@@ -1,0 +1,136 @@
+@import url("@MATUGEN_WAYBAR_COLORS@");
+
+* {
+    font-family: "JetBrains Mono Nerd Font", "Noto Sans CJK SC", sans-serif;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: alpha(@surface-container, 0.93);
+    border-bottom: 1px solid @outline-variant;
+    color: @on-surface;
+}
+
+tooltip {
+    background-color: @surface-container-high;
+    border: 1px solid @outline-variant;
+    border-radius: 6px;
+    color: @on-surface;
+}
+
+tooltip label {
+    padding: 4px 6px;
+}
+
+.modules-left,
+.modules-center,
+.modules-right {
+    margin: 0;
+}
+
+#clock,
+#battery,
+#cpu,
+#memory,
+#temperature,
+#backlight,
+#network,
+#pulseaudio,
+#custom-media,
+#tray,
+#mode,
+#idle_inhibitor,
+#power-profiles-daemon,
+#mpd,
+#custom-power {
+    padding: 0 10px;
+    color: @on-surface;
+}
+
+.modules-left > widget:first-child > #workspaces {
+    margin-left: 0;
+}
+
+.modules-right > widget:last-child {
+    margin-right: 0;
+}
+
+#workspaces {
+    margin: 0 4px;
+}
+
+#workspaces button {
+    min-width: 0;
+    margin: 0;
+    padding: 0 6px;
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    color: @on-surface-variant;
+}
+
+#workspaces button:hover,
+#workspaces button.focused {
+    background-color: @surface-container-high;
+    color: @primary;
+}
+
+#workspaces button.active {
+    color: mix(@primary, @surface, 0.35);
+}
+
+#workspaces button.urgent,
+#battery.critical,
+#network.disconnected,
+#temperature.critical {
+    color: @error;
+}
+
+#workspaces button.empty,
+#pulseaudio.muted,
+#idle_inhibitor.deactivated,
+#power-profiles-daemon.power-saver,
+#custom-power.disabled {
+    color: @outline;
+}
+
+#battery.warning,
+#temperature.warning {
+    color: mix(@tertiary, @surface, 0.3);
+}
+
+#battery.charging,
+#clock,
+#idle_inhibitor.activated,
+#power-profiles-daemon.performance {
+    color: @primary;
+}
+
+#custom-media,
+#backlight,
+#power-profiles-daemon.balanced {
+    color: @tertiary;
+}
+
+#tray {
+    padding: 0 6px;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background-color: @error-container;
+}
+
+button {
+    border: none;
+    border-radius: 0;
+}
+
+button:hover {
+    background: inherit;
+}
