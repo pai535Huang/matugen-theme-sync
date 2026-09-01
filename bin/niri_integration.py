@@ -619,8 +619,7 @@ class NiriIntegration:
 
     def _restore_locked(self) -> None:
         self._assert_safe_targets()
-        if self.committed_manifest_path.is_file():
-            self._finalize_committed_transaction()
+        self._recover_transaction()
         manifest = self._load_manifest()
         targets = manifest["targets"]
         if not targets:

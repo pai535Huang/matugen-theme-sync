@@ -188,6 +188,104 @@ class NiriIntegrationTests(unittest.TestCase):
         recovered.rollback()
         self.assertEqual(style.read_text(encoding="utf-8"), "before-crash\n")
 
+    def test_restore_recovers_uncommitted_current_before_uninstall(self):
+        originals = {}
+        for key, (relative, kind) in MODULE.TARGETS.items():
+            separator = "\n\n" if kind == "patched" else "\n"
+            originals[key] = f"{key}-original{separator}".encode()
+            self.write(relative, originals[key].decode())
+        self.apply_and_commit()
+        divergent = self.home / MODULE.TARGETS["waybar-style"][0]
+        divergent.write_bytes(b"genuine-post-commit-divergence\n")
+
+        self.manager.begin()
+        for key, (relative, _) in MODULE.TARGETS.items():
+            (self.home / relative).write_bytes(f"second-apply-{key}\n".encode())
+        self.manager._release_lifecycle_lock()
+        self.assertTrue(self.manager.transaction.is_dir())
+
+        recovered = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        recovered.restore()
+
+        for key, (relative, _) in MODULE.TARGETS.items():
+            with self.subTest(key=key):
+                self.assertEqual((self.home / relative).read_bytes(), originals[key])
+        self.assertFalse(recovered.transaction.exists())
+        self.assertFalse(recovered.manifest_path.exists())
+        self.assertFalse((recovered.root / "originals").exists())
+        self.assertFalse((recovered.root / "transactions").exists())
+        conflicts = recovered.root / "conflicts"
+        conflict_files = sorted(
+            path.relative_to(conflicts)
+            for path in conflicts.rglob("*")
+            if path.is_file()
+        )
+        self.assertEqual(
+            conflict_files,
+            [Path("20260901T120001/waybar-style")],
+        )
+        self.assertEqual(
+            (conflicts / conflict_files[0]).read_bytes(),
+            b"genuine-post-commit-divergence\n",
+        )
+
+    def test_interrupted_uninstall_cannot_resurrect_current_snapshot(self):
+        style = self.write(".config/waybar/style.css", "immutable-original\n")
+        original = style.read_bytes()
+        self.apply_and_commit()
+        managed = style.read_bytes()
+        self.assertNotEqual(managed, original)
+
+        self.manager.begin()
+        style.write_bytes(b"second-apply-managed-bytes\n")
+        self.manager._release_lifecycle_lock()
+        self.assertTrue(self.manager.transaction.is_dir())
+
+        interrupted = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        real_durable_unlink = interrupted._durable_unlink
+
+        def fail_after_manifest_unlink(path, *, missing_ok=False):
+            result = real_durable_unlink(path, missing_ok=missing_ok)
+            if Path(path) == interrupted.manifest_path:
+                raise OSError("injected failure after durable manifest unlink")
+            return result
+
+        with patch.object(
+            interrupted, "_durable_unlink", side_effect=fail_after_manifest_unlink
+        ):
+            with self.assertRaisesRegex(OSError, "after durable manifest unlink"):
+                interrupted.restore()
+
+        self.assertFalse(interrupted.manifest_path.exists())
+        self.assertFalse(interrupted.transaction.exists())
+        self.assertEqual(style.read_bytes(), original)
+
+        retry = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120002",
+        )
+        retry.begin()
+
+        immutable = retry.root / "originals/waybar-style"
+        current_snapshot = retry.transaction / "waybar-style"
+        self.assertEqual(style.read_bytes(), original)
+        self.assertEqual(immutable.read_bytes(), original)
+        self.assertEqual(current_snapshot.read_bytes(), original)
+        self.assertNotEqual(immutable.read_bytes(), managed)
+        retry.rollback()
+
     def test_changed_managed_file_is_archived_before_update(self):
         style = self.write(".config/waybar/style.css", "original\n")
         self.apply_and_commit()
