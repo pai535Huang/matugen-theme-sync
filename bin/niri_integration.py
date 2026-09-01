@@ -385,8 +385,8 @@ class NiriIntegration:
                 raise IntegrationError(
                     f"managed target is not a regular file: {target}"
                 )
+            self._archive_if_changed(key, target, entry)
             if target.exists():
-                self._archive_if_changed(key, target, entry)
                 current = target.read_text(encoding="utf-8")
                 mode = stat.S_IMODE(target.stat().st_mode)
             else:
@@ -402,13 +402,23 @@ class NiriIntegration:
         self._assert_safe_targets()
         self._require_transaction()
         manifest = self._load_manifest()
+        transaction_metadata = json.loads(
+            (self.transaction / "metadata.json").read_text(encoding="utf-8")
+        )
         for key, (_, kind) in TARGETS.items():
             if kind not in {"static", "patched"}:
                 continue
             target = self._target_path(key)
-            manifest["targets"][key]["deployed_checksum"] = (
+            entry = manifest["targets"][key]
+            entry["deployed_checksum"] = (
                 self._sha256(target) if target.is_file() else None
             )
+            if (
+                kind == "patched"
+                and entry.get("original_exists")
+                and not transaction_metadata[key].get("exists")
+            ):
+                entry["restore_original_on_uninstall"] = True
         self._atomic_write(
             self.committed_manifest_path,
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -457,6 +467,10 @@ class NiriIntegration:
         for key, (begin, end) in blocks.items():
             entry = targets[key]
             target = self._target_path(key)
+            if entry.get("restore_original_on_uninstall"):
+                self._archive_if_changed(key, target, entry)
+                self._restore_original(key, entry)
+                continue
             if not target.exists():
                 if entry.get("original_exists"):
                     self._restore_original(key, entry)

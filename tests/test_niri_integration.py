@@ -492,6 +492,33 @@ class NiriIntegrationTests(unittest.TestCase):
 
         self.assertEqual(niri.read_text(encoding="utf-8"), "layout {}\n")
 
+    def test_reapply_records_deleted_patched_configs_and_restore_recovers_originals(self):
+        cases = (
+            ("niri-config", ".config/niri/config.kdl", b"layout { focus-ring {} }\n"),
+            (
+                "rofi-config",
+                ".config/rofi/config.rasi",
+                b'configuration { modi: "drun"; }\n',
+            ),
+        )
+        for key, relative, original in cases:
+            with self.subTest(key=key):
+                target = self.write(relative, original.decode("utf-8"))
+                self.apply_and_commit()
+                target.unlink()
+
+                self.manager.begin()
+                self.manager.activate()
+                self.manager.commit()
+                self.manager.restore()
+
+                marker = self.state / (
+                    "matugen-theme-sync/niri/conflicts/20260901T120000/"
+                    f"{key}.absent"
+                )
+                self.assertEqual(target.read_bytes(), original)
+                self.assertEqual(marker.read_bytes(), b"")
+
     def test_restore_cleans_managed_state_but_preserves_conflicts(self):
         style = self.write(".config/waybar/style.css", "original\n")
         self.apply_and_commit()
