@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Session check: systemd user services do not inherit XDG_CURRENT_DESKTOP, so
+# detect a live Plasma session by process. Exit quietly when Plasma is not
+# running so that enabling this service in another desktop does nothing.
 CONFIG_DIR="$HOME/.config"
 POTD_CACHE_DIR="$HOME/.cache/plasma_engine_potd"
 WALLPAPER_CONFIG="plasma-org.kde.plasma.desktop-appletsrc"
@@ -8,6 +11,11 @@ KDE_CONFIG="kdeglobals"
 APPLY="$HOME/.local/bin/matugen-plasma-apply"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
+
+if ! pgrep -x plasmashell >/dev/null 2>&1; then
+  log "Plasma session not detected; exiting"
+  exit 0
+fi
 
 current_mode() {
   local scheme

@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Session check: systemd user services do not inherit XDG_CURRENT_DESKTOP, so
+# detect a live GNOME session by process. Exit quietly when GNOME is not
+# running so that enabling this service in another desktop does nothing.
+if ! pgrep -x gnome-shell >/dev/null 2>&1; then
+  printf '[%s] GNOME session not detected; exiting\n' "$(date --iso-8601=seconds)"
+  exit 0
+fi
+
 apply_matugen() {
   printf '[%s] running matugen-gnome-apply\n' "$(date --iso-8601=seconds)"
   if "$HOME/.local/bin/matugen-gnome-apply"; then
