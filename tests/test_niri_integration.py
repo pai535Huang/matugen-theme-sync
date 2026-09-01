@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import os
@@ -162,6 +163,169 @@ class NiriIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(conflict.read_text(encoding="utf-8"), "user-managed-edit\n")
         self.manager.rollback()
+        self.assertEqual(style.read_text(encoding="utf-8"), "user-managed-edit\n")
+
+    def test_failed_first_apply_retry_archives_edit_and_restore_keeps_conflict(self):
+        style = self.write(".config/waybar/style.css", "immutable-original\n")
+        self.manager.begin()
+        self.manager.deploy_static()
+        self.manager.rollback()
+        style.write_text("edit-after-failed-apply\n", encoding="utf-8")
+
+        self.manager.begin()
+        self.manager.deploy_static()
+        conflict = self.state / (
+            "matugen-theme-sync/niri/conflicts/20260901T120000/waybar-style"
+        )
+        self.assertEqual(
+            conflict.read_text(encoding="utf-8"), "edit-after-failed-apply\n"
+        )
+        self.manager.rollback()
+        self.assertEqual(style.read_text(encoding="utf-8"), "edit-after-failed-apply\n")
+
+        self.manager.begin()
+        self.manager.deploy_static()
+        self.manager.commit()
+        self.manager.restore()
+
+        self.assertEqual(style.read_text(encoding="utf-8"), "immutable-original\n")
+        self.assertEqual(
+            conflict.read_text(encoding="utf-8"), "edit-after-failed-apply\n"
+        )
+
+    def test_retry_archives_mode_only_edit_when_no_deployed_checksum_exists(self):
+        style = self.write(".config/waybar/style.css", "unchanged-bytes\n")
+        os.chmod(style, 0o640)
+        self.manager.begin()
+        self.manager.deploy_static()
+        self.manager.rollback()
+        os.chmod(style, 0o600)
+
+        self.manager.begin()
+        self.manager.deploy_static()
+
+        conflict = self.state / (
+            "matugen-theme-sync/niri/conflicts/20260901T120000/waybar-style"
+        )
+        self.assertEqual(conflict.read_text(encoding="utf-8"), "unchanged-bytes\n")
+        self.assertEqual(stat.S_IMODE(conflict.stat().st_mode), 0o600)
+        self.manager.rollback()
+        self.assertEqual(stat.S_IMODE(style.stat().st_mode), 0o600)
+
+    def test_begin_finalizes_commit_interrupted_before_manifest_write(self):
+        style = self.write(".config/waybar/style.css", "original\n")
+        self.manager.begin()
+        self.manager.deploy_static()
+        deployed = style.read_bytes()
+        expected_checksum = hashlib.sha256(deployed).hexdigest()
+        real_replace = MODULE.os.replace
+
+        def fail_manifest_replace(source, destination):
+            if Path(destination) == self.manager.manifest_path:
+                raise OSError("injected manifest replacement failure")
+            return real_replace(source, destination)
+
+        with patch.object(MODULE.os, "replace", side_effect=fail_manifest_replace):
+            with self.assertRaises(OSError):
+                self.manager.commit()
+
+        recovered = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        recovered.begin()
+
+        manifest = json.loads(recovered.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(style.read_bytes(), deployed)
+        self.assertEqual(
+            manifest["targets"]["waybar-style"]["deployed_checksum"],
+            expected_checksum,
+        )
+        style.write_text("next-operation-change\n", encoding="utf-8")
+        recovered.rollback()
+        self.assertEqual(style.read_bytes(), deployed)
+
+    def test_begin_finalizes_commit_interrupted_before_transaction_cleanup(self):
+        style = self.write(".config/waybar/style.css", "original\n")
+        self.manager.begin()
+        self.manager.deploy_static()
+        deployed = style.read_bytes()
+        expected_checksum = hashlib.sha256(deployed).hexdigest()
+        real_rmtree = MODULE.shutil.rmtree
+
+        def fail_transaction_cleanup(path, *args, **kwargs):
+            if Path(path) == self.manager.transaction:
+                raise OSError("injected transaction cleanup failure")
+            return real_rmtree(path, *args, **kwargs)
+
+        with patch.object(
+            MODULE.shutil, "rmtree", side_effect=fail_transaction_cleanup
+        ):
+            with self.assertRaises(OSError):
+                self.manager.commit()
+
+        recovered = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        recovered.begin()
+
+        manifest = json.loads(recovered.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(style.read_bytes(), deployed)
+        self.assertEqual(
+            manifest["targets"]["waybar-style"]["deployed_checksum"],
+            expected_checksum,
+        )
+        style.write_text("next-operation-change\n", encoding="utf-8")
+        recovered.rollback()
+        self.assertEqual(style.read_bytes(), deployed)
+
+    def test_begin_rejects_direct_target_symlink_without_state_changes(self):
+        external = self.base / "external-style"
+        external.write_text("external\n", encoding="utf-8")
+        style = self.home / ".config/waybar/style.css"
+        style.parent.mkdir(parents=True)
+        style.symlink_to(external)
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.begin()
+
+        self.assertTrue(style.is_symlink())
+        self.assertEqual(external.read_text(encoding="utf-8"), "external\n")
+        self.assertFalse(self.manager.root.exists())
+
+    def test_begin_rejects_dangling_target_symlink_without_state_changes(self):
+        style = self.home / ".config/waybar/style.css"
+        style.parent.mkdir(parents=True)
+        style.symlink_to(self.base / "missing-style")
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.begin()
+
+        self.assertTrue(style.is_symlink())
+        self.assertFalse(style.exists())
+        self.assertFalse(self.manager.root.exists())
+
+    def test_begin_rejects_symlinked_parent_without_state_changes(self):
+        external = self.base / "external-waybar"
+        external.mkdir()
+        (external / "style.css").write_text("external\n", encoding="utf-8")
+        waybar = self.home / ".config/waybar"
+        waybar.parent.mkdir(parents=True)
+        waybar.symlink_to(external, target_is_directory=True)
+
+        with self.assertRaises(MODULE.IntegrationError):
+            self.manager.begin()
+
+        self.assertTrue(waybar.is_symlink())
+        self.assertEqual(
+            (external / "style.css").read_text(encoding="utf-8"), "external\n"
+        )
+        self.assertFalse(self.manager.root.exists())
 
     def test_generated_files_are_restored_without_conflict_archives(self):
         generated = self.write(".config/niri/colors.kdl", "original-colors\n")

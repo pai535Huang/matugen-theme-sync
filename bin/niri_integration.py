@@ -100,6 +100,10 @@ class NiriIntegration:
     def manifest_path(self) -> Path:
         return self.root / "manifest.json"
 
+    @property
+    def committed_manifest_path(self) -> Path:
+        return self.transaction / "committed-manifest.json"
+
     @staticmethod
     def _sha256(path: Path) -> str:
         digest = hashlib.sha256()
@@ -129,6 +133,18 @@ class NiriIntegration:
 
     def _target_path(self, key: str) -> Path:
         return self.home / TARGETS[key][0]
+
+    def _assert_safe_targets(self) -> None:
+        for relative, _ in TARGETS.values():
+            component = self.home
+            if component.is_symlink():
+                raise IntegrationError(f"managed path is a symlink: {component}")
+            for part in Path(relative).parts:
+                component /= part
+                if component.is_symlink():
+                    raise IntegrationError(f"managed path is a symlink: {component}")
+                if not component.exists():
+                    break
 
     def _snapshot_target(self, key: str, directory: Path) -> dict[str, object]:
         target = self._target_path(key)
@@ -161,11 +177,10 @@ class NiriIntegration:
                     raise IntegrationError(f"managed target is not a file: {target}")
                 target.unlink()
 
-    def _load_manifest(self) -> dict[str, object]:
-        if not self.manifest_path.exists():
-            return {"version": 1, "targets": {}}
+    @staticmethod
+    def _read_manifest(path: Path) -> dict[str, object]:
         try:
-            manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise IntegrationError("managed theme manifest is unreadable") from error
         if manifest.get("version") != 1 or not isinstance(
@@ -173,6 +188,11 @@ class NiriIntegration:
         ):
             raise IntegrationError("managed theme manifest has an unsupported format")
         return manifest
+
+    def _load_manifest(self) -> dict[str, object]:
+        if not self.manifest_path.exists():
+            return {"version": 1, "targets": {}}
+        return self._read_manifest(self.manifest_path)
 
     def _write_manifest(self, manifest: dict[str, object]) -> None:
         self._atomic_write(
@@ -202,12 +222,25 @@ class NiriIntegration:
         if not self.transaction.is_dir():
             raise IntegrationError("no managed theme transaction is active")
 
-    def begin(self) -> None:
-        if self.transaction.exists():
-            if not self.transaction.is_dir():
-                raise IntegrationError("transaction path is not a directory")
+    def _finalize_committed_transaction(self) -> None:
+        manifest = self._read_manifest(self.committed_manifest_path)
+        self._write_manifest(manifest)
+        shutil.rmtree(self.transaction)
+
+    def _recover_transaction(self) -> None:
+        if not self.transaction.exists():
+            return
+        if not self.transaction.is_dir():
+            raise IntegrationError("transaction path is not a directory")
+        if self.committed_manifest_path.is_file():
+            self._finalize_committed_transaction()
+        else:
             self._restore_snapshot(self.transaction)
             shutil.rmtree(self.transaction)
+
+    def begin(self) -> None:
+        self._assert_safe_targets()
+        self._recover_transaction()
 
         manifest = self._load_manifest()
         targets = manifest["targets"]
@@ -244,7 +277,11 @@ class NiriIntegration:
     def _archive(self, key: str, target: Path) -> None:
         archive = self.root / "conflicts" / self.timestamp() / key
         if archive.exists():
-            if self._sha256(archive) == self._sha256(target):
+            if (
+                self._sha256(archive) == self._sha256(target)
+                and stat.S_IMODE(archive.stat().st_mode)
+                == stat.S_IMODE(target.stat().st_mode)
+            ):
                 return
             sequence = 1
             while archive.with_name(f"{key}.{sequence}").exists():
@@ -259,11 +296,29 @@ class NiriIntegration:
     def _archive_if_changed(
         self, key: str, target: Path, entry: dict[str, object]
     ) -> None:
+        if not target.exists():
+            return
+        if not target.is_file():
+            raise IntegrationError(f"managed target is not a regular file: {target}")
         deployed = entry.get("deployed_checksum")
-        if deployed and target.exists() and self._sha256(target) != deployed:
+        if deployed:
+            changed = self._sha256(target) != deployed
+        elif entry.get("original_exists"):
+            original = self.root / "originals" / key
+            if not original.is_file():
+                raise IntegrationError(f"original snapshot is missing {key}")
+            changed = (
+                self._sha256(target) != self._sha256(original)
+                or stat.S_IMODE(target.stat().st_mode)
+                != int(entry["original_mode"])
+            )
+        else:
+            changed = True
+        if changed:
             self._archive(key, target)
 
     def deploy_static(self) -> None:
+        self._assert_safe_targets()
         self._require_transaction()
         rendered = {}
         for key, relative in STATIC_SOURCES.items():
@@ -290,6 +345,7 @@ class NiriIntegration:
             self._atomic_write(target, source, mode)
 
     def activate(self) -> None:
+        self._assert_safe_targets()
         self._require_transaction()
         manifest = self._load_manifest()
         blocks = {
@@ -317,6 +373,7 @@ class NiriIntegration:
             self._atomic_write(target, updated, mode)
 
     def commit(self) -> None:
+        self._assert_safe_targets()
         self._require_transaction()
         manifest = self._load_manifest()
         for key, (_, kind) in TARGETS.items():
@@ -326,11 +383,19 @@ class NiriIntegration:
             manifest["targets"][key]["deployed_checksum"] = (
                 self._sha256(target) if target.is_file() else None
             )
+        self._atomic_write(
+            self.committed_manifest_path,
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        )
         self._write_manifest(manifest)
         shutil.rmtree(self.transaction)
 
     def rollback(self) -> None:
+        self._assert_safe_targets()
         self._require_transaction()
+        if self.committed_manifest_path.is_file():
+            self._finalize_committed_transaction()
+            return
         self._restore_snapshot(self.transaction)
         shutil.rmtree(self.transaction)
 
@@ -349,6 +414,9 @@ class NiriIntegration:
             target.unlink()
 
     def restore(self) -> None:
+        self._assert_safe_targets()
+        if self.transaction.exists() and self.committed_manifest_path.is_file():
+            self._finalize_committed_transaction()
         manifest = self._load_manifest()
         targets = manifest["targets"]
         if not targets:
