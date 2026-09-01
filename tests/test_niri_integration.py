@@ -235,40 +235,67 @@ class NiriIntegrationTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(style.stat().st_mode), 0o640)
         self.assertEqual(absent.read_bytes(), b"")
 
-    def test_begin_finalizes_commit_interrupted_before_manifest_write(self):
+    def test_commit_recovers_one_post_journal_manifest_failure(self):
         style = self.write(".config/waybar/style.css", "original\n")
         self.manager.begin()
         self.manager.deploy_static()
         deployed = style.read_bytes()
         expected_checksum = hashlib.sha256(deployed).hexdigest()
         real_replace = MODULE.os.replace
+        failed_once = False
 
         def fail_manifest_replace(source, destination):
-            if Path(destination) == self.manager.manifest_path:
+            nonlocal failed_once
+            if (
+                Path(destination) == self.manager.manifest_path
+                and self.manager.committed_manifest_path.is_file()
+                and not failed_once
+            ):
+                failed_once = True
                 raise OSError("injected manifest replacement failure")
             return real_replace(source, destination)
 
         with patch.object(MODULE.os, "replace", side_effect=fail_manifest_replace):
-            with self.assertRaises(OSError):
-                self.manager.commit()
+            try:
+                warning = self.manager.commit()
+            except OSError as exc:
+                self.fail(f"post-journal manifest failure was not recovered: {exc}")
 
-        recovered = MODULE.NiriIntegration(
-            self.home,
-            self.state,
-            self.resources,
-            timestamp=lambda: "20260901T120001",
-        )
-        recovered.begin()
-
-        manifest = json.loads(recovered.manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(self.manager.manifest_path.read_text(encoding="utf-8"))
+        self.assertIn("durable", warning)
         self.assertEqual(style.read_bytes(), deployed)
         self.assertEqual(
             manifest["targets"]["waybar-style"]["deployed_checksum"],
             expected_checksum,
         )
-        style.write_text("next-operation-change\n", encoding="utf-8")
-        recovered.rollback()
-        self.assertEqual(style.read_bytes(), deployed)
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertFalse(self.manager.committed_cleanup_path.exists())
+        self.assertFalse(self.manager.transaction.exists())
+
+    def test_commit_recovers_one_post_journal_cleanup_failure(self):
+        self.manager.begin()
+        self.manager.deploy_static()
+        cleanup = self.manager.committed_cleanup_path
+        real_rmtree = MODULE.shutil.rmtree
+        failed_once = False
+
+        def fail_cleanup_once(path, *args, **kwargs):
+            nonlocal failed_once
+            if Path(path) == cleanup and not failed_once:
+                failed_once = True
+                raise OSError("injected cleanup failure")
+            return real_rmtree(path, *args, **kwargs)
+
+        with patch.object(MODULE.shutil, "rmtree", side_effect=fail_cleanup_once):
+            try:
+                warning = self.manager.commit()
+            except OSError as exc:
+                self.fail(f"post-journal cleanup failure was not recovered: {exc}")
+
+        self.assertIn("durable", warning)
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertFalse(cleanup.exists())
+        self.assertFalse(self.manager.transaction.exists())
 
     def interrupt_commit_during_partial_cleanup(self):
         style = self.write(".config/waybar/style.css", "original\n")
@@ -290,8 +317,9 @@ class NiriIntegrationTests(unittest.TestCase):
         with patch.object(
             MODULE.shutil, "rmtree", side_effect=fail_transaction_cleanup
         ):
-            with self.assertRaises(OSError):
+            with self.assertRaises(MODULE.DurableCommitError) as raised:
                 self.manager.commit()
+        self.assertIn("pending recovery", str(raised.exception))
 
         return style, deployed, expected_checksum, cleanup, journal
 

@@ -80,6 +80,10 @@ class IntegrationError(RuntimeError):
     """Raised when managed theme deployment cannot complete safely."""
 
 
+class DurableCommitError(OSError):
+    """Raised when a durable commit needs a later recovery attempt."""
+
+
 class NiriIntegration:
     def __init__(
         self,
@@ -398,7 +402,7 @@ class NiriIntegration:
                 raise IntegrationError(f"cannot update malformed {key}") from error
             self._atomic_write(target, updated, mode)
 
-    def commit(self) -> None:
+    def commit(self) -> str | None:
         self._assert_safe_targets()
         self._require_transaction()
         manifest = self._load_manifest()
@@ -423,10 +427,18 @@ class NiriIntegration:
             self.committed_manifest_path,
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         )
-        self._write_manifest(manifest)
-        os.replace(self.transaction, self.committed_cleanup_path)
-        shutil.rmtree(self.committed_cleanup_path)
-        self.committed_manifest_path.unlink()
+        try:
+            self._finalize_committed_transaction()
+        except (OSError, IntegrationError) as initial_error:
+            try:
+                self._finalize_committed_transaction()
+            except (OSError, IntegrationError) as recovery_error:
+                raise DurableCommitError(
+                    "durable commit is pending recovery; the deployment "
+                    f"must not be rolled back: {recovery_error}"
+                ) from recovery_error
+            return f"durable commit recovered after: {initial_error}"
+        return None
 
     def rollback(self) -> None:
         self._assert_safe_targets()

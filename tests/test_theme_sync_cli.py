@@ -70,6 +70,8 @@ class DesktopDetectionTests(unittest.TestCase):
 class FakeNiriIntegration:
     calls = None
     root = None
+    failures = None
+    commit_warning = None
 
     def __init__(self, home, state_home, resources):
         self.home = home
@@ -77,27 +79,34 @@ class FakeNiriIntegration:
         self.resources = resources
         self.root = type(self).root or Path(state_home) / "matugen-theme-sync/niri"
 
+    def record(self, method):
+        self.calls.append(method)
+        failure = self.failures.get(method)
+        if failure is not None:
+            raise failure
+
     def begin(self):
-        self.calls.append("begin")
+        self.record("begin")
 
     def deploy_static(self):
-        self.calls.append("deploy_static")
+        self.record("deploy_static")
 
     def activate(self):
-        self.calls.append("activate")
+        self.record("activate")
 
     def validate(self, run):
-        self.calls.append("validate")
+        self.record("validate")
 
     def reload(self, run):
-        self.calls.append("reload")
+        self.record("reload")
         return []
 
     def commit(self):
-        self.calls.append("commit")
+        self.record("commit")
+        return self.commit_warning
 
     def rollback(self):
-        self.calls.append("rollback")
+        self.record("rollback")
 
     def restore(self):
         self.calls.append("restore")
@@ -133,9 +142,19 @@ class NiriCommandTests(unittest.TestCase):
         (self.systemd_dir / "matugen-niri.service").write_text(
             "[Service]\n", encoding="utf-8"
         )
+        for relative, content in (
+            ("waybar/style.css", '@import url("@MATUGEN_WAYBAR_COLORS@");\n'),
+            ("rofi/matugen.rasi", '@import "../colors.rasi"\n'),
+            ("mako/config", "include=@MATUGEN_MAKO_COLORS@\n"),
+        ):
+            target = self.niri_resources / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
         self.calls = []
         FakeNiriIntegration.calls = self.calls
         FakeNiriIntegration.root = None
+        FakeNiriIntegration.failures = {}
+        FakeNiriIntegration.commit_warning = None
         self.constant_patches = mock.patch.multiple(
             MODULE,
             HOME=self.home,
@@ -163,7 +182,13 @@ class NiriCommandTests(unittest.TestCase):
         self.addCleanup(self.environment.stop)
 
     def run_apply(
-        self, *, bootstrap_enabled=True, bootstrap_result=0, service_result=True
+        self,
+        *,
+        bootstrap_enabled=True,
+        bootstrap_result=0,
+        service_result=True,
+        service_exception=None,
+        disable_exception=None,
     ):
         def bootstrap_call(command):
             self.calls.append("bootstrap")
@@ -172,7 +197,14 @@ class NiriCommandTests(unittest.TestCase):
         def enable(info_de, start):
             self.calls.append("enable_service")
             self.assertTrue(start)
+            if service_exception is not None:
+                raise service_exception
             return service_result
+
+        def disable(info_de):
+            self.calls.append("disable_service")
+            if disable_exception is not None:
+                raise disable_exception
 
         with contextlib.ExitStack() as stack:
             stack.enter_context(
@@ -183,6 +215,9 @@ class NiriCommandTests(unittest.TestCase):
             )
             stack.enter_context(
                 mock.patch.object(MODULE, "install_service", side_effect=enable)
+            )
+            stack.enter_context(
+                mock.patch.object(MODULE, "disable_service", side_effect=disable)
             )
             stack.enter_context(mock.patch.object(MODULE, "check_dependencies"))
             stack.enter_context(
@@ -197,10 +232,16 @@ class NiriCommandTests(unittest.TestCase):
                     return_value=BIN / "matugen-theme-sync",
                 )
             )
-            with contextlib.redirect_stdout(io.StringIO()):
-                return MODULE.cmd_apply(
-                    force_de=MODULE.DE_NIRI, bootstrap=bootstrap_enabled
-                )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                try:
+                    result = MODULE.cmd_apply(
+                        force_de=MODULE.DE_NIRI, bootstrap=bootstrap_enabled
+                    )
+                except Exception as exc:
+                    self.fail(f"cmd_apply leaked an exception: {exc}")
+            self.apply_output = output.getvalue()
+            return result
 
     def test_niri_apply_runs_transaction_in_exact_order(self):
         result = self.run_apply()
@@ -227,15 +268,174 @@ class NiriCommandTests(unittest.TestCase):
         )
 
     def test_failed_service_attempt_disables_then_rolls_back(self):
-        def disable(info_de):
-            self.calls.append("disable_service")
-
-        with mock.patch.object(MODULE, "disable_service", side_effect=disable):
-            result = self.run_apply(service_result=False)
+        result = self.run_apply(service_result=False)
         self.assertEqual(result, 1)
         self.assertEqual(
             self.calls[-3:], ["enable_service", "disable_service", "rollback"]
         )
+
+    def test_begin_failure_returns_original_error_without_rollback(self):
+        FakeNiriIntegration.failures["begin"] = MODULE.IntegrationError(
+            "unsafe target"
+        )
+
+        result = self.run_apply()
+
+        self.assertEqual(result, 1)
+        self.assertEqual(self.calls, ["begin"])
+        self.assertIn("unsafe target", self.apply_output)
+
+    def test_pre_service_stage_failures_only_rollback_started_transaction(self):
+        cases = (
+            ("deploy_static", ["begin", "deploy_static", "rollback"]),
+            (
+                "activate",
+                ["begin", "deploy_static", "bootstrap", "activate", "rollback"],
+            ),
+            (
+                "validate",
+                [
+                    "begin",
+                    "deploy_static",
+                    "bootstrap",
+                    "activate",
+                    "validate",
+                    "rollback",
+                ],
+            ),
+            (
+                "reload",
+                [
+                    "begin",
+                    "deploy_static",
+                    "bootstrap",
+                    "activate",
+                    "validate",
+                    "reload",
+                    "rollback",
+                ],
+            ),
+        )
+        for method, expected in cases:
+            with self.subTest(method=method):
+                self.calls.clear()
+                FakeNiriIntegration.failures = {
+                    method: MODULE.IntegrationError(f"{method} failed")
+                }
+                result = self.run_apply()
+                self.assertEqual(result, 1)
+                self.assertEqual(self.calls, expected)
+                self.assertIn(f"{method} failed", self.apply_output)
+
+    def test_service_exception_disables_then_rolls_back(self):
+        result = self.run_apply(service_exception=OSError("systemd unavailable"))
+
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            self.calls[-3:], ["enable_service", "disable_service", "rollback"]
+        )
+        self.assertIn("systemd unavailable", self.apply_output)
+
+    def test_pre_journal_commit_failure_disables_then_rolls_back(self):
+        FakeNiriIntegration.failures["commit"] = OSError("journal write failed")
+
+        result = self.run_apply()
+
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            self.calls[-3:], ["commit", "disable_service", "rollback"]
+        )
+        self.assertIn("journal write failed", self.apply_output)
+
+    def test_cleanup_failures_do_not_mask_business_error_or_each_other(self):
+        FakeNiriIntegration.failures["commit"] = OSError("journal write failed")
+        FakeNiriIntegration.failures["rollback"] = OSError("rollback cleanup failed")
+
+        result = self.run_apply(disable_exception=OSError("disable cleanup failed"))
+
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            self.calls[-3:], ["commit", "disable_service", "rollback"]
+        )
+        self.assertIn("journal write failed", self.apply_output)
+        self.assertIn("disable cleanup failed", self.apply_output)
+        self.assertIn("rollback cleanup failed", self.apply_output)
+        self.assertLess(
+            self.apply_output.index("journal write failed"),
+            self.apply_output.index("disable cleanup failed"),
+        )
+
+    def test_durable_pending_error_keeps_service_and_does_not_rollback(self):
+        class TestDurableCommitError(OSError):
+            pass
+
+        FakeNiriIntegration.failures["commit"] = TestDurableCommitError(
+            "durable commit pending recovery"
+        )
+        with mock.patch.object(
+            MODULE, "DurableCommitError", TestDurableCommitError, create=True
+        ):
+            result = self.run_apply()
+
+        self.assertEqual(result, 1)
+        self.assertEqual(self.calls[-2:], ["enable_service", "commit"])
+        self.assertIn("durable commit pending recovery", self.apply_output)
+
+    def test_real_post_journal_recovery_keeps_service_and_returns_success(self):
+        manager = MODULE.NiriIntegration(
+            self.home,
+            self.home / ".local/state",
+            self.niri_resources,
+        )
+        real_replace = MODULE.os.replace
+        failed_once = False
+
+        def fail_manifest_once(source, destination):
+            nonlocal failed_once
+            if (
+                Path(destination) == manager.manifest_path
+                and manager.committed_manifest_path.is_file()
+                and not failed_once
+            ):
+                failed_once = True
+                raise OSError("injected manifest failure")
+            return real_replace(source, destination)
+
+        def enable(info_de, start):
+            self.calls.append("enable_service")
+            return True
+
+        output = io.StringIO()
+        integration_module = sys.modules[MODULE.NiriIntegration.__module__]
+        with mock.patch.object(
+            MODULE, "NiriIntegration", return_value=manager
+        ), mock.patch.object(
+            MODULE, "stream", return_value=0
+        ), mock.patch.object(
+            MODULE, "install_service", side_effect=enable
+        ), mock.patch.object(
+            MODULE,
+            "disable_service",
+            side_effect=AssertionError("durable deployment service was disabled"),
+        ), mock.patch.object(
+            MODULE, "check_dependencies"
+        ), mock.patch.object(
+            MODULE, "detect_session_type", return_value="wayland"
+        ), mock.patch.object(
+            MODULE, "script_path", return_value=BIN / "matugen-theme-sync"
+        ), mock.patch.object(
+            integration_module.shutil, "which", return_value=None
+        ), mock.patch.object(
+            MODULE.os, "replace", side_effect=fail_manifest_once
+        ), contextlib.redirect_stdout(output):
+            result = MODULE.cmd_apply(force_de=MODULE.DE_NIRI)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(self.calls, ["enable_service"])
+        self.assertIn("durable", output.getvalue())
+        self.assertTrue(manager.manifest_path.is_file())
+        self.assertFalse(manager.committed_manifest_path.exists())
+        self.assertFalse(manager.transaction.exists())
 
     def test_no_bootstrap_only_installs_supporting_files(self):
         output = io.StringIO()

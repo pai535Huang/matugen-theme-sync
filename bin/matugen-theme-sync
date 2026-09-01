@@ -24,7 +24,7 @@ SCRIPT_DIR = Path(os.path.realpath(__file__)).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from niri_integration import IntegrationError, NiriIntegration
+from niri_integration import DurableCommitError, IntegrationError, NiriIntegration
 
 APP_NAME = "matugen-theme-sync"
 
@@ -372,9 +372,11 @@ def cmd_apply(force_de=None, bootstrap=True):
     if de == DE_NIRI:
         state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
         manager = NiriIntegration(HOME, state_home, NIRI_RESOURCES_DIR)
+        transaction_started = False
         service_attempted = False
         try:
             manager.begin()
+            transaction_started = True
             manager.deploy_static()
             if stream(bootstrap_command(de)) != 0:
                 raise IntegrationError("首次 Matugen 生成失败")
@@ -385,12 +387,24 @@ def cmd_apply(force_de=None, bootstrap=True):
             service_attempted = True
             if not install_service(info_de, start=True):
                 raise IntegrationError("启用 Niri watcher 失败")
-            manager.commit()
-        except (OSError, IntegrationError) as exc:
-            if service_attempted:
-                disable_service(info_de)
-            manager.rollback()
+            commit_warning = manager.commit()
+            if commit_warning:
+                warn(commit_warning)
+        except DurableCommitError as exc:
             error(str(exc))
+            return 1
+        except (OSError, IntegrationError) as exc:
+            error(str(exc))
+            if service_attempted:
+                try:
+                    disable_service(info_de)
+                except Exception as cleanup_error:
+                    error(f"禁用服务清理失败: {cleanup_error}")
+            if transaction_started:
+                try:
+                    manager.rollback()
+                except Exception as cleanup_error:
+                    error(f"事务回滚清理失败: {cleanup_error}")
             return 1
         ok("首次主题已生成")
     elif bootstrap:
