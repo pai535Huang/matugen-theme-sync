@@ -81,7 +81,6 @@ post_hook = "niri msg action load-config-file 2>/dev/null || true"
 [templates.waybar]
 input_path = "~/.config/matugen/templates/waybar-colors.css"
 output_path = "~/.config/waybar/colors.css"
-post_hook = "pkill -SIGUSR2 waybar 2>/dev/null || true"
 
 [templates.rofi]
 input_path = "~/.config/matugen/templates/rofi-colors.rasi"

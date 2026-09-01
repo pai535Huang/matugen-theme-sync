@@ -343,9 +343,22 @@ reload_gtk() {
   gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3-dark >/dev/null 2>&1 || true
 }
 
+reload_waybar() {
+  pgrep -x waybar >/dev/null 2>&1 || return 0
+  # SIGUSR2 only reloads waybar's own style.css; the GTK theme stack (menus,
+  # tooltips) is initialized once at process start, so a full restart is
+  # required for GTK colors to update. setsid detaches from this shell so the
+  # restarted bar survives.
+  pkill waybar 2>/dev/null || true
+  sleep 0.3
+  setsid waybar >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+}
+
 sync_ok=1
 update_starship_palette || sync_ok=0
 reload_gtk || sync_ok=0
+reload_waybar || sync_ok=0
 reload_kitty || sync_ok=0
 reload_nvim || sync_ok=0
 reload_btop || sync_ok=0

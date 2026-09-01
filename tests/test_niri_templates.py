@@ -182,7 +182,11 @@ class NiriTemplateTest(unittest.TestCase):
         self.assertEqual(
             templates["waybar"]["output_path"], "~/.config/waybar/colors.css"
         )
-        self.assertIn("SIGUSR2", templates["waybar"]["post_hook"])
+        # Waybar is restarted by the apply script (reload_waybar) so its GTK
+        # theme stack picks up regenerated colors; no SIGUSR2 post_hook is
+        # needed here.
+        self.assertNotIn("post_hook", templates["waybar"])
+        self.assertNotIn("SIGUSR2", templates["waybar"].get("post_hook", ""))
 
         self.assertEqual(
             templates["rofi"]["input_path"],

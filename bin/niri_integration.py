@@ -754,7 +754,10 @@ class NiriIntegration:
     def reload(self, run: Callable) -> list[str]:
         commands = (
             ["niri", "msg", "action", "load-config-file"],
-            ["pkill", "-SIGUSR2", "waybar"],
+            # SIGUSR2 only reloads waybar's own style.css; the GTK theme
+            # stack (menus, tooltips) is initialized once at process start,
+            # so a full restart is required for GTK colors to update.
+            ["bash", "-c", "pkill waybar; sleep 0.3; setsid waybar >/dev/null 2>&1 &"],
             ["makoctl", "reload"],
             # Re-selecting the theme makes GTK3 notice regenerated colors.css
             # files (mirrors the KDE watcher's apply_gtk_mode). gsettings is

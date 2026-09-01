@@ -1590,7 +1590,7 @@ manager.rollback()
         def run(command, **kwargs):
             calls.append(command)
             return SimpleNamespace(
-                returncode=1 if command[0] in ("niri", "pkill") else 0
+                returncode=1 if command[0] in ("niri", "bash") else 0
             )
 
         with patch.object(MODULE.shutil, "which", return_value="/bin/tool"):
@@ -1598,9 +1598,25 @@ manager.rollback()
 
         self.assertEqual(
             [command[0] for command in calls],
-            ["niri", "pkill", "makoctl", "gsettings", "gsettings", "gsettings"],
+            ["niri", "bash", "makoctl", "gsettings", "gsettings", "gsettings"],
         )
-        self.assertEqual(warnings, ["could not reload niri", "could not reload pkill"])
+        self.assertEqual(warnings, ["could not reload niri", "could not reload bash"])
+
+    def test_reload_restarts_waybar_for_gtk_theme_refresh(self):
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(MODULE.shutil, "which", return_value="/bin/tool"):
+            self.manager.reload(run)
+
+        waybar_cmd = next(c for c in calls if c[0] == "bash")
+        script = waybar_cmd[2]
+        self.assertIn("pkill waybar", script)
+        self.assertIn("setsid waybar", script)
+        self.assertNotIn("SIGUSR2", script)
 
     def test_reload_issues_gtk_refresh_via_gsettings(self):
         calls = []
