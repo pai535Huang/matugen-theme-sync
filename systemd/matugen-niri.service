@@ -1,6 +1,7 @@
 [Unit]
 Description=Synchronize Matugen themes with the Niri wallpaper daemon
 After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"

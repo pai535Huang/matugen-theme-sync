@@ -203,11 +203,18 @@ def run(cmd):
         return None
 
 
-def stream(cmd):
+def stream(cmd, *, env=None, pass_fds=()):
     """Run cmd, streaming merged output line by line. Returns the exit code."""
     try:
-        proc = subprocess.Popen(cmd, text=True, bufsize=1,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(
+            cmd,
+            text=True,
+            bufsize=1,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            pass_fds=pass_fds,
+        )
     except FileNotFoundError:
         error(f"命令未找到: {cmd[0]}")
         return 1
@@ -363,11 +370,15 @@ def cmd_apply(force_de=None, bootstrap=True):
     if de != DE_NIRI and not install_service(info_de, start=True):
         return 1
 
-    check_dependencies(de)
+    dependencies_available = check_dependencies(de)
 
     if de == DE_NIRI and not bootstrap:
         warn("--no-bootstrap: 仅更新辅助文件；保持当前 Niri 应用主题与 watcher 状态不变")
         return 0
+
+    if de == DE_NIRI and not dependencies_available:
+        error("缺少 Niri 必需依赖；辅助文件已更新，但主题接管与 watcher 状态保持不变")
+        return 1
 
     if de == DE_NIRI:
         state_home = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
@@ -378,7 +389,9 @@ def cmd_apply(force_de=None, bootstrap=True):
             manager.begin()
             transaction_started = True
             manager.deploy_static()
-            if stream(bootstrap_command(de)) != 0:
+            if stream(
+                bootstrap_command(de), **manager.bootstrap_subprocess_kwargs()
+            ) != 0:
                 raise IntegrationError("首次 Matugen 生成失败")
             manager.activate()
             manager.validate(subprocess.run)

@@ -208,7 +208,7 @@ enabled.
 The watcher queries the wallpaper daemon rather than watching an undocumented
 cache directory:
 
-1. Prefer `awww query --json` and parse the JSON without shell word splitting.
+1. Prefer `awww query --all --json` and parse the JSON without shell word splitting.
 2. Fall back to legacy `swww query`, treating the entire value after the image
    marker as the path so spaces are preserved.
 3. Fall back to an explicitly supplied image and then the existing wallpaper

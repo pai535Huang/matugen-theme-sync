@@ -14,6 +14,7 @@ window {
     border: 1px;
     border-color: @outline-variant;
     border-radius: 12px;
+    padding: 10px;
     text-color: @on-surface;
 }
 
@@ -24,55 +25,118 @@ mainbox {
 }
 
 inputbar {
-    background-color: @surface-container;
-    children: [ prompt, entry, case-indicator ];
-    orientation: horizontal;
-    spacing: 6px;
-}
-
-prompt {
-    background-color: @surface-container-low;
-    padding: 6px 10px;
-    text-color: @primary;
-}
-
-entry {
     background-color: @surface-container-low;
     border-radius: 8px;
+    children: [ prompt, textbox-prompt-colon, entry, overlay, num-filtered-rows, textbox-num-sep, num-rows, case-indicator ];
+    orientation: horizontal;
     padding: 6px 10px;
+    spacing: 6px;
     text-color: @on-surface;
 }
 
+prompt {
+    background-color: transparent;
+    spacing: 0;
+    text-color: @primary;
+}
+
+textbox-prompt-colon {
+    background-color: transparent;
+    expand: false;
+    margin: 0px 4px 0px 0px;
+    str: ":";
+    text-color: @on-surface-variant;
+}
+
+entry {
+    background-color: transparent;
+    cursor: text;
+    expand: true;
+    placeholder: "Type to filter";
+    placeholder-color: @on-surface-variant;
+    spacing: 0;
+    text-color: @on-surface;
+}
+
+overlay {
+    background-color: @primary-container;
+    border-radius: 6px;
+    margin: 0px 4px;
+    padding: 0px 4px;
+    text-color: @on-primary-container;
+}
+
+num-filtered-rows {
+    background-color: transparent;
+    expand: false;
+    text-color: @on-surface-variant;
+}
+
+textbox-num-sep {
+    background-color: transparent;
+    expand: false;
+    str: "/";
+    text-color: @outline;
+}
+
+num-rows {
+    background-color: transparent;
+    expand: false;
+    text-color: @on-surface-variant;
+}
+
 case-indicator {
-    background-color: @surface-container-low;
-    padding: 6px 10px;
+    background-color: transparent;
+    spacing: 0;
     text-color: @on-surface-variant;
 }
 
 message {
     background-color: @surface-container-high;
+    border-radius: 8px;
     padding: 6px 10px;
+    text-color: @on-surface;
+}
+
+textbox {
+    background-color: transparent;
     text-color: @on-surface;
 }
 
 listview {
     background-color: @surface-container;
     columns: 1;
+    fixed-height: false;
     lines: 12;
+    scrollbar: true;
+    spacing: 4px;
     text-color: @on-surface;
+}
+
+scrollbar {
+    background-color: @surface-container-low;
+    border-radius: 4px;
+    handle-color: @primary;
+    handle-width: 6px;
+    width: 6px;
 }
 
 mode-switcher {
     background-color: @surface-container-low;
     border-radius: 8px;
-    padding: 6px 10px;
+    padding: 4px;
+    spacing: 4px;
 }
 
-mode-switcher button {
-    padding: 4px;
+button {
+    background-color: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
     text-color: @on-surface;
 }
 
+button selected,
 mode-switcher button.selected {
     background-color: @primary-container;
     text-color: @on-primary-container;
@@ -81,21 +145,24 @@ mode-switcher button.selected {
 element {
     background-color: @surface-container;
     border-radius: 8px;
+    children: [ element-icon, element-text ];
+    cursor: pointer;
     padding: 5px 10px;
+    spacing: 8px;
     text-color: @on-surface;
 }
 
-element selected.normal {
-    background-color: @primary-container;
-    text-color: @on-primary-container;
+element normal.normal {
+    background-color: @surface-container;
+    text-color: @on-surface;
 }
 
-element selected.active {
-    background-color: @tertiary-container;
-    text-color: @on-tertiary-container;
+element normal.active {
+    background-color: @secondary-container;
+    text-color: @on-secondary-container;
 }
 
-element selected.urgent {
+element normal.urgent {
     background-color: @error-container;
     text-color: @on-error-container;
 }
@@ -115,21 +182,31 @@ element alternate.urgent {
     text-color: @on-error-container;
 }
 
+element selected.normal {
+    background-color: @primary-container;
+    text-color: @on-primary-container;
+}
+
+element selected.active {
+    background-color: @secondary-container;
+    text-color: @on-secondary-container;
+}
+
+element selected.urgent {
+    background-color: @error;
+    text-color: @on-error;
+}
+
 element-text {
     background-color: transparent;
+    cursor: inherit;
+    highlight: inherit;
     text-color: inherit;
 }
 
 element-icon {
     background-color: transparent;
+    cursor: inherit;
     size: 20px;
-}
-
-scrollbar {
-    background-color: @surface-container;
-    handle-color: @primary;
-}
-
-scrollbar handle {
-    background-color: @primary;
+    text-color: inherit;
 }

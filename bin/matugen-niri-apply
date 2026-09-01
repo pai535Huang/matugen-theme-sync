@@ -11,6 +11,9 @@ STATE_DIR="$HOME/.cache/matugen-niri"
 PALETTE_STATE="$STATE_DIR/last-palette.txt"
 THEME_STATE="$STATE_DIR/last-theme.txt"
 MATUGEN_CONFIG="$HOME/.config/matugen/config.toml"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+LIFECYCLE_LOCK="$STATE_HOME/matugen-theme-sync/niri.lock"
+INHERITED_LOCK_FD_ENV="MATUGEN_NIRI_INHERITED_LOCK_FD"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 
@@ -67,38 +70,69 @@ for namespace in payload.values():
         if not isinstance(image, str) or not os.path.isfile(image):
             continue
         name = output.get("name", "")
-        candidates.append((name.casefold() if isinstance(name, str) else "", image))
+        name = name if isinstance(name, str) else ""
+        candidates.append((name.casefold(), image, name))
 
 if not candidates:
     raise SystemExit(1)
 
-candidates.sort()
+candidates.sort(key=lambda candidate: (candidate[0], candidate[1]))
+_, selected_path, selected_name = candidates[0]
+selected_label = selected_name or "<unnamed>"
 if len(candidates) > 1:
-    print(f"awww reports multiple wallpapers; selecting {candidates[0][1]}", file=sys.stderr)
-print(candidates[0][1])
+    print(
+        "awww reports multiple valid output wallpapers; selecting output "
+        f"{selected_label} ({selected_path}) for the global palette",
+        file=sys.stderr,
+    )
+print(selected_path)
 '
 }
 
 # `awww query` and older swww versions printed either `image:` or `path:`.
 # Keep the rest of the line intact because wallpaper paths may contain spaces.
 query_legacy() {
-  local tool="$1" output line path
+  local tool="$1" output
   command -v "$tool" >/dev/null 2>&1 || return 1
   if ! output="$("$tool" query 2>/dev/null)"; then
     return 1
   fi
-  while IFS= read -r line; do
-    case "$line" in
-      *"image: "*) path="${line##*image: }" ;;
-      *"path: "*) path="${line##*path: }" ;;
-      *) continue ;;
-    esac
-    if [[ -f "$path" ]]; then
-      printf '%s\n' "$path"
-      return 0
-    fi
-  done <<< "$output"
-  return 1
+  printf '%s' "$output" | python3 -c '
+import os
+import sys
+
+tool = sys.argv[1]
+candidates = []
+for line in sys.stdin.read().splitlines():
+    positions = [
+        (line.rfind(marker), marker)
+        for marker in ("image: ", "path: ")
+        if marker in line
+    ]
+    if not positions:
+        continue
+    index, marker = max(positions)
+    path = line[index + len(marker):]
+    if not os.path.isfile(path):
+        continue
+    prefix = line[:index].rstrip()
+    name = prefix.split(":", 1)[0].strip()
+    candidates.append((name.casefold(), path, name))
+
+if not candidates:
+    raise SystemExit(1)
+
+candidates.sort(key=lambda candidate: (candidate[0], candidate[1]))
+_, selected_path, selected_name = candidates[0]
+selected_label = selected_name or "<unnamed>"
+if len(candidates) > 1:
+    print(
+        f"{tool} reports multiple valid output wallpapers; selecting output "
+        f"{selected_label} ({selected_path}) for the global palette",
+        file=sys.stderr,
+    )
+print(selected_path)
+' "$tool"
 }
 
 query_swww() { query_legacy swww; }
@@ -118,6 +152,30 @@ if (( print_wallpaper )); then
   printf '%s\n' "$image"
   exit 0
 fi
+
+acquire_lifecycle_lock() {
+  local inherited_fd="${!INHERITED_LOCK_FD_ENV:-}"
+  local inherited_identity lock_identity
+
+  mkdir -p "${LIFECYCLE_LOCK%/*}"
+  if [[ "$inherited_fd" =~ ^[0-9]+$ ]] \
+    && [[ -e "/proc/$$/fd/$inherited_fd" ]] \
+    && [[ -e "$LIFECYCLE_LOCK" ]]; then
+    inherited_identity="$(stat -Lc '%d:%i' "/proc/$$/fd/$inherited_fd" 2>/dev/null || true)"
+    lock_identity="$(stat -Lc '%d:%i' "$LIFECYCLE_LOCK" 2>/dev/null || true)"
+    if [[ -n "$inherited_identity" && "$inherited_identity" == "$lock_identity" ]]; then
+      # The CLI passed the same locked open-file description to this one
+      # bootstrap child, so this conversion is re-entrant and cannot race.
+      flock -x "$inherited_fd"
+      return
+    fi
+  fi
+
+  exec 8>"$LIFECYCLE_LOCK"
+  flock -x 8
+}
+
+acquire_lifecycle_lock
 
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/apply.lock"

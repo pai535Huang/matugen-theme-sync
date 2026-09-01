@@ -922,7 +922,7 @@ def test_readme_documents_managed_niri_lifecycle(self):
         "Waybar",
         "Rofi",
         "Mako",
-        "awww query --json",
+        "awww query --all --json",
         "uninstall",
     ):
         with self.subTest(text=text):
@@ -943,7 +943,7 @@ Document:
 - automatic first-apply backup and exact state path;
 - managed Waybar stylesheet, Rofi theme block, complete Mako config, and Niri include block;
 - immutable originals, conflict archive, rollback, and uninstall restoration;
-- `awww query --json`, legacy swww fallback, paths with spaces, and deterministic first-output palette choice;
+- `awww query --all --json`, legacy swww fallback, paths with spaces, and deterministic first-output palette choice;
 - optional Waybar/Rofi/Mako behavior;
 - `--no-bootstrap` leaving application themes and watcher untouched; and
 - recovery commands: inspect `manifest.json`, inspect `conflicts/`, and run `matugen-theme-sync uninstall --de niri`.

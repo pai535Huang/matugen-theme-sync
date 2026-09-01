@@ -33,6 +33,11 @@ polls=0
 log "Watching Niri wallpaper daemon every ${INTERVAL}s"
 
 while true; do
+  if ! pgrep -x niri >/dev/null 2>&1; then
+    log "Niri exited; stopping wallpaper watcher"
+    break
+  fi
+
   if image="$("$APPLY" --print-wallpaper 2>/dev/null)"; then
     if [[ -n "$image" && "$image" != "$last_image" ]]; then
       if "$APPLY" wallpaper "$image"; then

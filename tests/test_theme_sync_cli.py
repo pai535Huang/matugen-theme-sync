@@ -157,6 +157,12 @@ class FakeNiriIntegration:
     def deploy_static(self):
         self.record("deploy_static")
 
+    def bootstrap_subprocess_kwargs(self):
+        return {
+            "env": {"MATUGEN_NIRI_INHERITED_LOCK_FD": "99"},
+            "pass_fds": (99,),
+        }
+
     def activate(self):
         self.record("activate")
 
@@ -221,6 +227,7 @@ class NiriCommandTests(unittest.TestCase):
         FakeNiriIntegration.root = None
         FakeNiriIntegration.failures = {}
         FakeNiriIntegration.commit_warning = None
+        self.bootstrap_kwargs = None
         self.constant_patches = mock.patch.multiple(
             MODULE,
             HOME=self.home,
@@ -256,8 +263,9 @@ class NiriCommandTests(unittest.TestCase):
         service_exception=None,
         disable_exception=None,
     ):
-        def bootstrap_call(command):
+        def bootstrap_call(command, **kwargs):
             self.calls.append("bootstrap")
+            self.bootstrap_kwargs = kwargs
             return bootstrap_result
 
         def enable(info_de, start):
@@ -324,6 +332,13 @@ class NiriCommandTests(unittest.TestCase):
                 "enable_service",
                 "commit",
             ],
+        )
+        self.assertIn("pass_fds", self.bootstrap_kwargs)
+        self.assertIn("env", self.bootstrap_kwargs)
+        self.assertEqual(self.bootstrap_kwargs["pass_fds"], (99,))
+        self.assertEqual(
+            self.bootstrap_kwargs["env"]["MATUGEN_NIRI_INHERITED_LOCK_FD"],
+            "99",
         )
 
     def test_failed_bootstrap_rolls_back_before_activation(self):
@@ -532,6 +547,48 @@ class NiriCommandTests(unittest.TestCase):
             "--no-bootstrap: 仅更新辅助文件；保持当前 Niri 应用主题与 watcher 状态不变",
             output.getvalue(),
         )
+
+    def test_missing_required_niri_dependencies_abort_before_theme_takeover(self):
+        output = io.StringIO()
+        with mock.patch.object(
+            MODULE, "NiriIntegration", FakeNiriIntegration
+        ), mock.patch.object(
+            MODULE, "install_service", side_effect=AssertionError("service enabled")
+        ), mock.patch.object(
+            MODULE, "check_dependencies", return_value=False
+        ), mock.patch.object(
+            MODULE, "stream", side_effect=AssertionError("bootstrap started")
+        ), mock.patch.object(
+            MODULE, "detect_session_type", return_value="wayland"
+        ), mock.patch.object(
+            MODULE, "script_path", return_value=BIN / "matugen-theme-sync"
+        ), contextlib.redirect_stdout(output):
+            result = MODULE.cmd_apply(force_de=MODULE.DE_NIRI, bootstrap=True)
+
+        self.assertEqual(result, 1)
+        self.assertEqual(self.calls, [])
+        self.assertTrue((self.home / ".local/bin/matugen-niri-apply").is_file())
+        self.assertTrue((self.home / ".config/matugen/config.toml").is_file())
+        self.assertIn("必需依赖", output.getvalue())
+
+    def test_no_bootstrap_reports_missing_dependencies_but_preserves_lifecycle(self):
+        output = io.StringIO()
+        with mock.patch.object(
+            MODULE, "NiriIntegration", side_effect=AssertionError("transaction started")
+        ), mock.patch.object(
+            MODULE, "install_service", side_effect=AssertionError("service enabled")
+        ), mock.patch.object(
+            MODULE, "dependency_report", return_value=(["matugen", "niri"], [])
+        ), mock.patch.object(
+            MODULE, "detect_session_type", return_value="wayland"
+        ), mock.patch.object(
+            MODULE, "script_path", return_value=BIN / "matugen-theme-sync"
+        ), contextlib.redirect_stdout(output):
+            result = MODULE.cmd_apply(force_de=MODULE.DE_NIRI, bootstrap=False)
+
+        self.assertEqual(result, 0)
+        self.assertIn("缺少依赖: matugen, niri", output.getvalue())
+        self.assertIn("保持当前 Niri 应用主题与 watcher 状态不变", output.getvalue())
 
     def test_no_bootstrap_preserves_existing_managed_theme_and_watcher_state(self):
         managed_contents = {

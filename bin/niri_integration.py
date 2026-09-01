@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
 import stat
+import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 
 NIRI_BEGIN = "// BEGIN MATUGEN THEME SYNC"
@@ -36,6 +38,8 @@ STATIC_SOURCES = {
     "rofi-theme": "rofi/matugen.rasi",
     "mako-config": "mako/config",
 }
+
+INHERITED_LOCK_FD_ENV = "MATUGEN_NIRI_INHERITED_LOCK_FD"
 
 
 class ManagedBlockError(RuntimeError):
@@ -99,6 +103,7 @@ class NiriIntegration:
             lambda: datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         )
         self.transaction = self.root / "transactions/current"
+        self._lock_descriptor: int | None = None
 
     @property
     def manifest_path(self) -> Path:
@@ -112,6 +117,10 @@ class NiriIntegration:
     def committed_cleanup_path(self) -> Path:
         return self.root / "transactions/committed-cleanup"
 
+    @property
+    def lock_path(self) -> Path:
+        return self.root.parent / "niri.lock"
+
     @staticmethod
     def _sha256(path: Path) -> str:
         digest = hashlib.sha256()
@@ -121,8 +130,68 @@ class NiriIntegration:
         return digest.hexdigest()
 
     @staticmethod
-    def _atomic_write(path: Path, data: str | bytes, mode: int = 0o644) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def _fsync_directory(path: Path) -> None:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    @classmethod
+    def _durable_mkdir(cls, path: Path) -> None:
+        path = Path(path)
+        missing = []
+        current = path
+        while not current.exists():
+            missing.append(current)
+            parent = current.parent
+            if parent == current:
+                raise OSError(f"cannot find an existing parent for {path}")
+            current = parent
+        if not current.is_dir():
+            raise NotADirectoryError(current)
+        for directory in reversed(missing):
+            try:
+                os.mkdir(directory)
+            except FileExistsError:
+                if not directory.is_dir():
+                    raise
+            else:
+                cls._fsync_directory(directory.parent)
+
+    @classmethod
+    def _durable_replace(cls, source: Path, destination: Path) -> None:
+        source = Path(source)
+        destination = Path(destination)
+        cls._durable_mkdir(destination.parent)
+        os.replace(source, destination)
+        cls._fsync_directory(destination.parent)
+        if source.parent != destination.parent:
+            cls._fsync_directory(source.parent)
+
+    @classmethod
+    def _durable_unlink(cls, path: Path, *, missing_ok: bool = False) -> None:
+        path = Path(path)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            if missing_ok:
+                return
+            raise
+        cls._fsync_directory(path.parent)
+
+    @classmethod
+    def _durable_rmtree(cls, path: Path) -> None:
+        path = Path(path)
+        shutil.rmtree(path)
+        cls._fsync_directory(path.parent)
+
+    @classmethod
+    def _atomic_write(cls, path: Path, data: str | bytes, mode: int = 0o644) -> None:
+        cls._durable_mkdir(path.parent)
         payload = data.encode("utf-8") if isinstance(data, str) else data
         descriptor, temporary_name = tempfile.mkstemp(
             dir=path.parent, prefix=f".{path.name}."
@@ -132,12 +201,47 @@ class NiriIntegration:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(payload)
                 stream.flush()
+                os.fchmod(stream.fileno(), mode)
                 os.fsync(stream.fileno())
-            os.chmod(temporary, mode)
-            os.replace(temporary, path)
+            cls._durable_replace(temporary, path)
         finally:
             if temporary.exists():
-                temporary.unlink()
+                cls._durable_unlink(temporary)
+
+    def _acquire_lifecycle_lock(self) -> None:
+        if self._lock_descriptor is not None:
+            raise IntegrationError("managed theme lifecycle lock is already held")
+        self._durable_mkdir(self.lock_path.parent)
+        existed = self.lock_path.exists()
+        descriptor = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            if not existed:
+                self._fsync_directory(self.lock_path.parent)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self._lock_descriptor = descriptor
+
+    def _release_lifecycle_lock(self) -> None:
+        descriptor = self._lock_descriptor
+        if descriptor is None:
+            return
+        self._lock_descriptor = None
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+    def bootstrap_subprocess_kwargs(
+        self, environment: Mapping[str, str] | None = None
+    ) -> dict[str, object]:
+        descriptor = self._lock_descriptor
+        if descriptor is None:
+            raise IntegrationError("managed theme lifecycle lock is not held")
+        child_environment = dict(os.environ if environment is None else environment)
+        child_environment[INHERITED_LOCK_FD_ENV] = str(descriptor)
+        return {"env": child_environment, "pass_fds": (descriptor,)}
 
     def _target_path(self, key: str) -> Path:
         return self.home / TARGETS[key][0]
@@ -183,7 +287,7 @@ class NiriIntegration:
             elif target.exists():
                 if not target.is_file() and not target.is_symlink():
                     raise IntegrationError(f"managed target is not a file: {target}")
-                target.unlink()
+                self._durable_unlink(target)
 
     @staticmethod
     def _read_manifest(path: Path) -> dict[str, object]:
@@ -236,14 +340,17 @@ class NiriIntegration:
         if self.committed_cleanup_path.exists():
             if not self.committed_cleanup_path.is_dir():
                 raise IntegrationError("committed cleanup path is not a directory")
-            shutil.rmtree(self.committed_cleanup_path)
+            self._durable_rmtree(self.committed_cleanup_path)
         if self.transaction.exists():
             if not self.transaction.is_dir():
                 raise IntegrationError("transaction path is not a directory")
-            os.replace(self.transaction, self.committed_cleanup_path)
+            self._durable_replace(self.transaction, self.committed_cleanup_path)
         if self.committed_cleanup_path.exists():
-            shutil.rmtree(self.committed_cleanup_path)
-        self.committed_manifest_path.unlink()
+            self._durable_rmtree(self.committed_cleanup_path)
+        # A prior attempt may have removed cleanup but failed while syncing its
+        # parent. Re-sync before the recovery journal can disappear.
+        self._fsync_directory(self.committed_manifest_path.parent)
+        self._durable_unlink(self.committed_manifest_path)
 
     def _recover_transaction(self) -> None:
         if self.committed_manifest_path.is_file():
@@ -252,36 +359,43 @@ class NiriIntegration:
         if self.committed_cleanup_path.exists():
             if not self.committed_cleanup_path.is_dir():
                 raise IntegrationError("committed cleanup path is not a directory")
-            shutil.rmtree(self.committed_cleanup_path)
+            self._durable_rmtree(self.committed_cleanup_path)
         if not self.transaction.exists():
             return
         if not self.transaction.is_dir():
             raise IntegrationError("transaction path is not a directory")
         self._restore_snapshot(self.transaction)
-        shutil.rmtree(self.transaction)
+        self._durable_rmtree(self.transaction)
 
     def begin(self) -> None:
-        self._assert_safe_targets()
-        self._recover_transaction()
+        self._acquire_lifecycle_lock()
+        try:
+            self._assert_safe_targets()
+            self._recover_transaction()
 
-        manifest = self._load_manifest()
-        targets = manifest["targets"]
-        for key in TARGETS:
-            if key not in targets:
-                targets[key] = self._create_original(key)
-        self._write_manifest(manifest)
+            manifest = self._load_manifest()
+            targets = manifest["targets"]
+            for key in TARGETS:
+                if key not in targets:
+                    targets[key] = self._create_original(key)
+            self._write_manifest(manifest)
 
-        transactions = self.root / "transactions"
-        preparing = transactions / "preparing"
-        if preparing.exists():
-            shutil.rmtree(preparing)
-        preparing.mkdir(parents=True)
-        metadata = {key: self._snapshot_target(key, preparing) for key in TARGETS}
-        self._atomic_write(
-            preparing / "metadata.json",
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-        )
-        os.replace(preparing, self.transaction)
+            transactions = self.root / "transactions"
+            preparing = transactions / "preparing"
+            if preparing.exists():
+                self._durable_rmtree(preparing)
+            self._durable_mkdir(preparing)
+            metadata = {
+                key: self._snapshot_target(key, preparing) for key in TARGETS
+            }
+            self._atomic_write(
+                preparing / "metadata.json",
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            )
+            self._durable_replace(preparing, self.transaction)
+        except BaseException:
+            self._release_lifecycle_lock()
+            raise
 
     def _render_static(self, key: str, source: str) -> str:
         replacements = {
@@ -403,51 +517,57 @@ class NiriIntegration:
             self._atomic_write(target, updated, mode)
 
     def commit(self) -> str | None:
-        self._assert_safe_targets()
-        self._require_transaction()
-        manifest = self._load_manifest()
-        transaction_metadata = json.loads(
-            (self.transaction / "metadata.json").read_text(encoding="utf-8")
-        )
-        for key, (_, kind) in TARGETS.items():
-            if kind not in {"static", "patched"}:
-                continue
-            target = self._target_path(key)
-            entry = manifest["targets"][key]
-            entry["deployed_checksum"] = (
-                self._sha256(target) if target.is_file() else None
-            )
-            if (
-                kind == "patched"
-                and entry.get("original_exists")
-                and not transaction_metadata[key].get("exists")
-            ):
-                entry["restore_original_on_uninstall"] = True
-        self._atomic_write(
-            self.committed_manifest_path,
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        )
         try:
-            self._finalize_committed_transaction()
-        except (OSError, IntegrationError) as initial_error:
+            self._assert_safe_targets()
+            self._require_transaction()
+            manifest = self._load_manifest()
+            transaction_metadata = json.loads(
+                (self.transaction / "metadata.json").read_text(encoding="utf-8")
+            )
+            for key, (_, kind) in TARGETS.items():
+                if kind not in {"static", "patched"}:
+                    continue
+                target = self._target_path(key)
+                entry = manifest["targets"][key]
+                entry["deployed_checksum"] = (
+                    self._sha256(target) if target.is_file() else None
+                )
+                if (
+                    kind == "patched"
+                    and entry.get("original_exists")
+                    and not transaction_metadata[key].get("exists")
+                ):
+                    entry["restore_original_on_uninstall"] = True
+            self._atomic_write(
+                self.committed_manifest_path,
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            )
             try:
                 self._finalize_committed_transaction()
-            except (OSError, IntegrationError) as recovery_error:
-                raise DurableCommitError(
-                    "durable commit is pending recovery; the deployment "
-                    f"must not be rolled back: {recovery_error}"
-                ) from recovery_error
-            return f"durable commit recovered after: {initial_error}"
-        return None
+            except (OSError, IntegrationError) as initial_error:
+                try:
+                    self._finalize_committed_transaction()
+                except (OSError, IntegrationError) as recovery_error:
+                    raise DurableCommitError(
+                        "durable commit is pending recovery; the deployment "
+                        f"must not be rolled back: {recovery_error}"
+                    ) from recovery_error
+                return f"durable commit recovered after: {initial_error}"
+            return None
+        finally:
+            self._release_lifecycle_lock()
 
     def rollback(self) -> None:
-        self._assert_safe_targets()
-        if self.committed_manifest_path.is_file():
-            self._finalize_committed_transaction()
-            return
-        self._require_transaction()
-        self._restore_snapshot(self.transaction)
-        shutil.rmtree(self.transaction)
+        try:
+            self._assert_safe_targets()
+            if self.committed_manifest_path.is_file():
+                self._finalize_committed_transaction()
+                return
+            self._require_transaction()
+            self._restore_snapshot(self.transaction)
+            self._durable_rmtree(self.transaction)
+        finally:
+            self._release_lifecycle_lock()
 
     def _restore_original(self, key: str, entry: dict[str, object]) -> None:
         target = self._target_path(key)
@@ -461,9 +581,16 @@ class NiriIntegration:
         elif target.exists():
             if not target.is_file() and not target.is_symlink():
                 raise IntegrationError(f"managed target is not a file: {target}")
-            target.unlink()
+            self._durable_unlink(target)
 
     def restore(self) -> None:
+        self._acquire_lifecycle_lock()
+        try:
+            self._restore_locked()
+        finally:
+            self._release_lifecycle_lock()
+
+    def _restore_locked(self) -> None:
         self._assert_safe_targets()
         if self.committed_manifest_path.is_file():
             self._finalize_committed_transaction()
@@ -485,6 +612,7 @@ class NiriIntegration:
                 continue
             if not target.exists():
                 if entry.get("original_exists"):
+                    self._archive_absent(key)
                     self._restore_original(key, entry)
                 continue
             if not target.is_file():
@@ -500,7 +628,7 @@ class NiriIntegration:
                 continue
             self._archive_if_changed(key, target, entry)
             if not entry.get("original_exists") and not restored.strip():
-                target.unlink()
+                self._durable_unlink(target)
             else:
                 self._atomic_write(
                     target, restored, stat.S_IMODE(target.stat().st_mode)
@@ -516,13 +644,13 @@ class NiriIntegration:
             self._restore_original(key, entry)
 
         if self.manifest_path.exists():
-            self.manifest_path.unlink()
+            self._durable_unlink(self.manifest_path)
         originals = self.root / "originals"
         transactions = self.root / "transactions"
         if originals.exists():
-            shutil.rmtree(originals)
+            self._durable_rmtree(originals)
         if transactions.exists():
-            shutil.rmtree(transactions)
+            self._durable_rmtree(transactions)
 
     def validate(self, run: Callable) -> None:
         commands = (
@@ -534,16 +662,52 @@ class NiriIntegration:
                 str(self.home / ".config/rofi/themes/matugen.rasi"),
                 "-dump-theme",
             ],
-            ["mako", "-c", str(self.home / ".config/mako/config"), "--help"],
+            ["mako", "-c", str(self.home / ".config/mako/config")],
         )
         for command in commands:
             if shutil.which(command[0]) is None:
                 continue
-            result = run(command, capture_output=True, text=True)
-            if result.returncode != 0 or "Failed to parse config" in result.stderr:
+            if command[0] != "mako":
+                result = run(command, capture_output=True, text=True)
+                if result.returncode == 0 and "Failed to parse config" not in result.stderr:
+                    continue
                 raise IntegrationError(
                     f"configuration validation failed: {command[0]}"
                 )
+
+            environment = os.environ.copy()
+            environment.pop("DISPLAY", None)
+            environment["WAYLAND_DISPLAY"] = "matugen-theme-sync-invalid"
+            environment["DBUS_SESSION_BUS_ADDRESS"] = (
+                f"unix:path={self.root.parent / 'validation-no-bus'}"
+            )
+            try:
+                result = run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    env=environment,
+                )
+            except subprocess.TimeoutExpired:
+                # Mako parsed the file and stayed alive until the bounded
+                # isolated-session probe terminated it.
+                continue
+            diagnostic = (
+                f"{getattr(result, 'stdout', '')}\n{getattr(result, 'stderr', '')}"
+            ).lower()
+            if "failed to parse" in diagnostic or "[config:" in diagnostic:
+                raise IntegrationError("configuration validation failed: mako")
+            if result.returncode == 0:
+                continue
+            expected_connection_failures = (
+                "failed to connect to user bus",
+                "failed to connect to wayland",
+                "failed to connect to display",
+            )
+            if any(message in diagnostic for message in expected_connection_failures):
+                continue
+            raise IntegrationError("configuration validation failed: mako")
 
     def reload(self, run: Callable) -> list[str]:
         commands = (

@@ -1,4 +1,6 @@
 import configparser
+import fcntl
+import importlib.util
 import json
 import os
 import shlex
@@ -13,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin" / "matugen-niri-apply"
 WATCHER = ROOT / "bin" / "matugen-niri-watch"
 NIRI_UNIT = ROOT / "systemd" / "matugen-niri.service"
+INTEGRATION_SPEC = importlib.util.spec_from_file_location(
+    "niri_integration_for_script_tests", ROOT / "bin/niri_integration.py"
+)
+INTEGRATION = importlib.util.module_from_spec(INTEGRATION_SPEC)
+INTEGRATION_SPEC.loader.exec_module(INTEGRATION)
 REQUIRED_OUTPUTS = (
     ".config/niri/colors.kdl",
     ".config/waybar/colors.css",
@@ -187,6 +194,37 @@ class NiriApplyResolverTests(NiriApplyTestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, f"{self.spaced}\n")
 
+    def test_legacy_multi_output_sorts_name_then_path_and_reports_global_palette(self):
+        output = (
+            f"Z-OUT: image: {self.second}\n"
+            f"a-out: image: {self.spaced}\n"
+        )
+        cases = (
+            {"awww_stdout": output},
+            {"swww_stdout": output},
+        )
+        for daemon_output in cases:
+            with self.subTest(daemon=next(iter(daemon_output))):
+                result = self.run_query(**daemon_output)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, f"{self.spaced}\n")
+                self.assertIn("a-out", result.stderr)
+                self.assertIn("global palette", result.stderr)
+
+    def test_awww_json_multi_output_reports_selected_output_and_global_palette(self):
+        payload = {
+            "": [
+                {"name": "Z-OUT", "displaying": {"image": str(self.second)}},
+                {"name": "a-out", "displaying": {"image": str(self.spaced)}},
+            ]
+        }
+
+        result = self.run_query(awww_json=payload)
+
+        self.assertEqual(result.stdout, f"{self.spaced}\n")
+        self.assertIn("a-out", result.stderr)
+        self.assertIn("global palette", result.stderr)
+
 
 class NiriApplyGenerationTests(NiriApplyTestCase):
     def setUp(self):
@@ -267,6 +305,72 @@ done <<< "$REQUIRED_OUTPUTS"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"<{self.spaced}>\n", self.args_file.read_text(encoding="utf-8"))
+
+    def test_normal_generation_waits_for_the_shared_lifecycle_lock(self):
+        lock = self.base / "state/matugen-theme-sync/niri.lock"
+        lock.parent.mkdir(parents=True)
+        descriptor = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.tools}{os.pathsep}{env['PATH']}",
+                "XDG_STATE_HOME": str(self.base / "state"),
+                **{key: str(value) for key, value in self.generation_env().items()},
+            }
+        )
+        process = subprocess.Popen(
+            ["bash", str(SCRIPT), "manual", "--force", str(self.spaced)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            time.sleep(0.25)
+            self.assertFalse(
+                self.args_file.exists(),
+                "generation raced a managed lifecycle holding niri.lock",
+            )
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            stdout, stderr = process.communicate(timeout=3)
+            self.assertEqual(process.returncode, 0, stdout + stderr)
+            self.assertTrue(self.args_file.exists())
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+            if process.poll() is None:
+                process.kill()
+            process.communicate()
+
+    def test_bootstrap_inherits_the_lifecycle_lock_without_deadlock(self):
+        state = self.base / "state"
+        manager = INTEGRATION.NiriIntegration(self.home, state, ROOT / "niri")
+        manager.begin()
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.tools}{os.pathsep}{env['PATH']}",
+                "XDG_STATE_HOME": str(state),
+                **{key: str(value) for key, value in self.generation_env().items()},
+            }
+        )
+        try:
+            result = subprocess.run(
+                ["bash", str(SCRIPT), "manual", "--force", str(self.spaced)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                timeout=3,
+                check=False,
+                **manager.bootstrap_subprocess_kwargs(env),
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        finally:
+            manager.rollback()
 
 
 class NiriWatcherTests(unittest.TestCase):
@@ -381,6 +485,52 @@ fi
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.call_lines(), [])
+
+    def test_exits_cleanly_when_niri_disappears_after_startup(self):
+        pgrep_count = self.base / "pgrep-count.txt"
+        pgrep_sequence = self.base / "pgrep-sequence.txt"
+        pgrep_sequence.write_text("0\n0\n1\n", encoding="utf-8")
+        self.write_tool(
+            "pgrep",
+            """#!/usr/bin/env bash
+count=0
+[[ -f "$MATUGEN_NIRI_PGREP_COUNT" ]] && count="$(<"$MATUGEN_NIRI_PGREP_COUNT")"
+(( count += 1 ))
+printf '%s\n' "$count" > "$MATUGEN_NIRI_PGREP_COUNT"
+status="$(sed -n "${count}p" "$MATUGEN_NIRI_PGREP_SEQUENCE")"
+exit "${status:-1}"
+""",
+        )
+
+        result = self.run_watcher(
+            "/wallpapers/one.png\n/wallpapers/two.png\n",
+            5,
+            MATUGEN_NIRI_PGREP_COUNT=pgrep_count,
+            MATUGEN_NIRI_PGREP_SEQUENCE=pgrep_sequence,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.query_count.read_text(encoding="utf-8").strip(), "1")
+        self.assertEqual(self.call_lines(), ["<wallpaper>", "</wallpapers/one.png>"])
+        self.assertIn("Niri exited", result.stderr)
+
+    def test_service_is_bound_to_the_graphical_session_lifecycle(self):
+        parser = configparser.RawConfigParser(interpolation=None)
+        parser.read(NIRI_UNIT, encoding="utf-8")
+
+        self.assertIn(
+            "graphical-session.target",
+            parser.get("Unit", "PartOf", fallback="").split(),
+        )
+        self.assertIn(
+            "graphical-session.target",
+            parser.get("Unit", "After", fallback="").split(),
+        )
+        self.assertIn(
+            "graphical-session.target",
+            parser.get("Install", "WantedBy", fallback="").split(),
+        )
+        self.assertEqual(parser.get("Service", "Restart"), "on-failure")
 
     def test_missing_wayland_display_still_polls_the_wallpaper_daemon(self):
         result = self.run_watcher("\n\n", 2, WAYLAND_DISPLAY="")

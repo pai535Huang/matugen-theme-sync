@@ -1,5 +1,8 @@
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import tempfile
 import tomllib
 import unittest
 
@@ -75,14 +78,72 @@ class NiriTemplateTest(unittest.TestCase):
         for widget in (
             "window", "mainbox", "inputbar", "message", "listview",
             "mode-switcher", "element", "element-text", "element-icon",
-            "scrollbar", "entry", "prompt", "case-indicator",
+            "scrollbar", "entry", "prompt", "case-indicator", "textbox",
+            "textbox-prompt-colon", "num-filtered-rows", "textbox-num-sep",
+            "num-rows", "overlay", "button",
         ):
             self.assertRegex(STATIC_ROFI, rf"(?m)^{re.escape(widget)}(?:[ .]|\s*\{{)")
         for state in (
+            "normal.normal", "normal.active", "normal.urgent",
             "selected.normal", "selected.active", "selected.urgent",
             "alternate.normal", "alternate.active", "alternate.urgent",
         ):
             self.assertIn(f"element {state}", STATIC_ROFI)
+
+    def test_rofi_widget_tree_restores_standalone_default_children(self) -> None:
+        for expected in (
+            "children: [ inputbar, message, listview, mode-switcher ];",
+            "children: [ prompt, textbox-prompt-colon, entry, overlay, "
+            "num-filtered-rows, textbox-num-sep, num-rows, case-indicator ];",
+            "children: [ element-icon, element-text ];",
+            "scrollbar: true;",
+            'placeholder: "Type to filter";',
+            "placeholder-color: @on-surface-variant;",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, STATIC_ROFI)
+
+    def test_rofi_nine_states_use_readable_matugen_role_pairs(self) -> None:
+        expected_pairs = {
+            "normal.normal": ("surface-container", "on-surface"),
+            "normal.active": ("secondary-container", "on-secondary-container"),
+            "normal.urgent": ("error-container", "on-error-container"),
+            "alternate.normal": ("surface-container-low", "on-surface"),
+            "alternate.active": ("tertiary-container", "on-tertiary-container"),
+            "alternate.urgent": ("error-container", "on-error-container"),
+            "selected.normal": ("primary-container", "on-primary-container"),
+            "selected.active": ("secondary-container", "on-secondary-container"),
+            "selected.urgent": ("error", "on-error"),
+        }
+        for state, (background, foreground) in expected_pairs.items():
+            with self.subTest(state=state):
+                self.assertRegex(
+                    STATIC_ROFI,
+                    rf"(?ms)^element {re.escape(state)}\s*\{{[^}}]*"
+                    rf"background-color:\s*@{background};[^}}]*"
+                    rf"text-color:\s*@{foreground};",
+                )
+
+    def test_real_rofi_parses_the_rendered_standalone_theme(self) -> None:
+        rofi = shutil.which("rofi")
+        if rofi is None:
+            self.skipTest("rofi is not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            themes = root / "themes"
+            themes.mkdir()
+            (root / "colors.rasi").write_text(
+                TOKEN.sub("#5f6368", ROFI_RASI), encoding="utf-8"
+            )
+            theme = themes / "matugen.rasi"
+            theme.write_text(STATIC_ROFI, encoding="utf-8")
+            result = subprocess.run(
+                [rofi, "-no-config", "-theme", str(theme), "-dump-theme"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_mako_uses_supported_urgency_and_role_pairs(self) -> None:
         self.assertNotIn("[urgency=high]", MAKO)
