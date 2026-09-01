@@ -18,6 +18,8 @@ def _validate_markers(text: str, begin: str, end: str) -> int:
     end_count = text.count(end)
     if begin_count != end_count or begin_count > 1:
         raise ManagedBlockError("managed theme markers are partial or duplicated")
+    if begin_count and _block_pattern(begin, end).search(text) is None:
+        raise ManagedBlockError("managed theme markers are malformed")
     return begin_count
 
 

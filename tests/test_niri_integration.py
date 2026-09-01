@@ -34,3 +34,17 @@ class ManagedBlockTests(unittest.TestCase):
             with self.subTest(text=text):
                 with self.assertRaises(MODULE.ManagedBlockError):
                     MODULE.upsert_managed_block(text, BEGIN, END, "new")
+
+    def test_end_before_begin_is_rejected_by_upsert_and_remove(self):
+        text = f"header\n{END}\n{BEGIN}\nbody\n"
+        with self.assertRaises(MODULE.ManagedBlockError):
+            MODULE.upsert_managed_block(text, BEGIN, END, "new")
+        with self.assertRaises(MODULE.ManagedBlockError):
+            MODULE.remove_managed_block(text, BEGIN, END)
+
+    def test_embedded_marker_is_rejected_by_upsert_and_remove(self):
+        text = f"header {BEGIN}\nbody\n{END}\n"
+        with self.assertRaises(MODULE.ManagedBlockError):
+            MODULE.upsert_managed_block(text, BEGIN, END, "new")
+        with self.assertRaises(MODULE.ManagedBlockError):
+            MODULE.remove_managed_block(text, BEGIN, END)
