@@ -134,11 +134,13 @@ the per-operation snapshot, retains the durable original snapshot, and reports
 the exact failing component. Project helper files may remain installed, but no
 partially deployed application theme remains active.
 
-`--no-bootstrap` installs the integration without generating or activating a
-theme. It still deploys static resources and creates backups, but defers the
-managed Niri include, application reloads, and watcher start until a later
-normal apply. This prevents an include from referring to a missing generated
-file.
+`--no-bootstrap` installs the helper scripts, Matugen configuration, templates,
+and service unit without beginning the managed-theme transaction. It does not
+back up or replace application themes, add managed blocks, enable the service,
+or reload applications. A later normal apply performs the complete transaction.
+This prevents static Waybar or Mako configuration from referring to missing
+generated colors and guarantees that `--no-bootstrap` cannot leave a partially
+active theme.
 
 ## Theme Design
 
@@ -212,9 +214,9 @@ cache directory:
 3. Fall back to an explicitly supplied image and then the existing wallpaper
    directories only for manual or startup generation.
 
-When outputs display different images, sort by output name and use the first
-valid image. Log the selected output and warn that the resulting palette is
-global. Re-query periodically and invoke apply only when the selected image
+When outputs display different images, sort case-insensitively by output name
+and use the first valid image. Log the selected output and warn that the
+resulting palette is global. Re-query periodically and invoke apply only when the selected image
 identity changes. The watcher no longer monitors `~/.cache/awww` or regenerates
 the palette for unrelated Niri configuration writes.
 
