@@ -44,6 +44,10 @@ class NiriTemplateTest(unittest.TestCase):
             "non-empty `conflicts/`",
             "does not change the current application theme or watcher state",
             "uninstall",
+            "GTK 3 and GTK 4",
+            "qt5ct",
+            "qt6ct",
+            "adw-gtk3-dark",
         ):
             with self.subTest(text=text):
                 self.assertIn(text, readme)
