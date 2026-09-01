@@ -543,6 +543,8 @@ class NiriIntegration:
             self._atomic_write(target, updated, mode)
 
     def commit(self) -> str | None:
+        """Commit, retaining the lifecycle lock only while rollback is valid."""
+        release_lock = True
         try:
             self._assert_safe_targets()
             self._require_transaction()
@@ -581,8 +583,14 @@ class NiriIntegration:
                     ) from recovery_error
                 return f"durable commit recovered after: {initial_error}"
             return None
+        except DurableCommitError:
+            raise
+        except (OSError, IntegrationError):
+            release_lock = False
+            raise
         finally:
-            self._release_lifecycle_lock()
+            if release_lock:
+                self._release_lifecycle_lock()
 
     def rollback(self) -> None:
         try:

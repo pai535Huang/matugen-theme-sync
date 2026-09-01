@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import zlib
@@ -129,6 +130,14 @@ class NiriIntegrationTests(unittest.TestCase):
         finally:
             os.close(descriptor)
 
+    def assert_lifecycle_lock_unavailable(self):
+        descriptor = os.open(self.manager.lock_path, os.O_RDWR)
+        try:
+            with self.assertRaises(BlockingIOError):
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(descriptor)
+
     def test_first_apply_keeps_immutable_original_and_is_idempotent(self):
         style = self.write(".config/waybar/style.css", "original-style\n")
         niri = self.write(".config/niri/config.kdl", "layout {}\n")
@@ -232,6 +241,68 @@ class NiriIntegrationTests(unittest.TestCase):
         self.assertEqual(
             (conflicts / conflict_files[0]).read_bytes(),
             b"genuine-post-commit-divergence\n",
+        )
+
+    def test_restore_uses_recovered_committed_manifest_before_conflict_checks(self):
+        originals = {}
+        for key, (relative, kind) in MODULE.TARGETS.items():
+            separator = "\n\n" if kind == "patched" else "\n"
+            originals[key] = f"{key}-immutable-original{separator}".encode()
+            self.write(relative, originals[key].decode())
+        self.apply_and_commit()
+        stale_manifest = json.loads(
+            self.manager.manifest_path.read_text(encoding="utf-8")
+        )
+        stale_checksum = stale_manifest["targets"]["waybar-style"][
+            "deployed_checksum"
+        ]
+
+        self.manager.begin()
+        (self.resources / "waybar/style.css").write_text(
+            "/* second committed deployment */\n"
+            '@import url("@MATUGEN_WAYBAR_COLORS@");\n',
+            encoding="utf-8",
+        )
+        self.manager.deploy_static()
+        self.manager.activate()
+
+        with patch.object(
+            self.manager,
+            "_finalize_committed_transaction",
+            side_effect=OSError("leave durable committed state on disk"),
+        ):
+            with self.assertRaises(MODULE.DurableCommitError):
+                self.manager.commit()
+
+        committed_manifest = json.loads(
+            self.manager.committed_manifest_path.read_text(encoding="utf-8")
+        )
+        committed_checksum = committed_manifest["targets"]["waybar-style"][
+            "deployed_checksum"
+        ]
+        self.assertNotEqual(stale_checksum, committed_checksum)
+        self.assertTrue(self.manager.manifest_path.is_file())
+        self.assertTrue(self.manager.committed_manifest_path.is_file())
+        self.assertTrue(self.manager.transaction.is_dir())
+
+        recovered = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        recovered.restore()
+
+        for key, (relative, _) in MODULE.TARGETS.items():
+            with self.subTest(key=key):
+                self.assertEqual((self.home / relative).read_bytes(), originals[key])
+        self.assertFalse(recovered.manifest_path.exists())
+        self.assertFalse(recovered.committed_manifest_path.exists())
+        self.assertFalse(recovered.transaction.exists())
+        conflicts = recovered.root / "conflicts"
+        self.assertFalse(
+            conflicts.exists() and any(conflicts.rglob("*")),
+            "stale pre-recovery checksums archived a false conflict",
         )
 
     def test_interrupted_uninstall_cannot_resurrect_current_snapshot(self):
@@ -404,6 +475,70 @@ class NiriIntegrationTests(unittest.TestCase):
         parent_sync = parent_syncs[0]
         self.assertLess(file_sync, replacement)
         self.assertLess(replacement, parent_sync)
+
+    def test_fsync_file_syncs_real_target_and_closes_descriptor(self):
+        target = self.base / "generated-colors"
+        target.write_bytes(b"generated\n")
+        opened_descriptors = []
+        synced_targets = []
+        real_open = MODULE.os.open
+        real_fsync = MODULE.os.fsync
+
+        def record_open(path, flags, *args):
+            descriptor = real_open(path, flags, *args)
+            if Path(path) == target:
+                opened_descriptors.append(descriptor)
+            return descriptor
+
+        def record_fsync(descriptor):
+            synced_targets.append(Path(os.readlink(f"/proc/self/fd/{descriptor}")))
+            return real_fsync(descriptor)
+
+        with patch.object(MODULE.os, "open", side_effect=record_open), patch.object(
+            MODULE.os, "fsync", side_effect=record_fsync
+        ):
+            self.manager._fsync_file(target)
+
+        self.assertEqual(synced_targets, [target])
+        self.assertEqual(len(opened_descriptors), 1)
+        with self.assertRaises(OSError):
+            os.fstat(opened_descriptors[0])
+
+    def test_fsync_file_rejects_symlink(self):
+        if not hasattr(os, "O_NOFOLLOW"):
+            self.skipTest("O_NOFOLLOW is unavailable")
+        target = self.base / "generated-colors"
+        target.write_bytes(b"generated\n")
+        link = self.base / "generated-colors-link"
+        link.symlink_to(target)
+
+        with self.assertRaises(OSError):
+            self.manager._fsync_file(link)
+
+    def test_fsync_file_rejects_non_regular_target_and_closes_descriptor(self):
+        directory = self.base / "generated-colors-directory"
+        directory.mkdir()
+        opened_descriptors = []
+        real_open = MODULE.os.open
+
+        def record_open(path, flags, *args):
+            descriptor = real_open(path, flags, *args)
+            if Path(path) == directory:
+                opened_descriptors.append(descriptor)
+            return descriptor
+
+        with patch.object(MODULE.os, "open", side_effect=record_open), patch.object(
+            MODULE.os, "fsync"
+        ) as fsync:
+            with self.assertRaisesRegex(
+                MODULE.IntegrationError, "not a regular file"
+            ):
+                self.manager._fsync_file(directory)
+
+        fsync.assert_not_called()
+        self.assertEqual(len(opened_descriptors), 1)
+        with self.assertRaises(OSError):
+            os.fstat(opened_descriptors[0])
 
     def test_begin_publishes_complete_preparing_snapshot_durably_before_current(self):
         self.write(".config/waybar/style.css", "original\n")
@@ -608,7 +743,9 @@ class NiriIntegrationTests(unittest.TestCase):
 
         self.assertFalse(self.manager.committed_manifest_path.exists())
         self.assertTrue(self.manager.transaction.is_dir())
+        self.assert_lifecycle_lock_unavailable()
         self.manager.rollback()
+        self.assert_lifecycle_lock_available()
 
     def test_commit_rejects_generated_symlink_before_journal(self):
         generated = self.write_generated_targets()
@@ -661,11 +798,115 @@ class NiriIntegrationTests(unittest.TestCase):
 
         self.assertFalse(self.manager.committed_manifest_path.exists())
         self.assertTrue(self.manager.transaction.is_dir())
+        self.assert_lifecycle_lock_unavailable()
         self.manager.rollback()
         self.assertEqual(
             {key: path.read_text(encoding="utf-8") for key, path in generated.items()},
             original,
         )
+
+    def test_pre_journal_failure_blocks_competitor_until_rollback_finishes(self):
+        generated = self.write_generated_targets()
+        original = {
+            key: path.read_bytes() for key, path in generated.items()
+        }
+        self.manager.begin()
+        for key, path in generated.items():
+            path.write_bytes(f"{key}-new-deployment\n".encode())
+
+        with patch.object(
+            self.manager,
+            "_fsync_file",
+            side_effect=OSError("injected pre-journal fsync failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "pre-journal fsync failure"):
+                self.manager.commit()
+
+        competitor = MODULE.NiriIntegration(
+            self.home,
+            self.state,
+            self.resources,
+            timestamp=lambda: "20260901T120001",
+        )
+        competitor_began = threading.Event()
+        release_competitor = threading.Event()
+        competitor_errors = []
+
+        def run_competitor():
+            try:
+                competitor.begin()
+                competitor_began.set()
+                if not release_competitor.wait(timeout=3):
+                    raise TimeoutError("competitor release was not signaled")
+                competitor.rollback()
+            except BaseException as error:
+                competitor_errors.append(error)
+                competitor_began.set()
+
+        thread = threading.Thread(target=run_competitor)
+        thread.start()
+        try:
+            self.assertFalse(
+                competitor_began.wait(timeout=0.25),
+                "competitor acquired the lifecycle lock before rollback",
+            )
+            self.manager.rollback()
+            self.assertTrue(
+                competitor_began.wait(timeout=3),
+                "competitor did not acquire the lifecycle lock after rollback",
+            )
+            self.assertFalse(competitor_errors)
+            self.assertTrue(
+                competitor.transaction.is_dir(),
+                "first rollback deleted the competitor transaction",
+            )
+            self.assertEqual(
+                {key: path.read_bytes() for key, path in generated.items()},
+                original,
+            )
+        finally:
+            if self.manager._lock_descriptor is not None:
+                self.manager._release_lifecycle_lock()
+            release_competitor.set()
+            thread.join(timeout=3)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(competitor_errors)
+
+    def test_visible_commit_journal_error_stays_locked_for_finalizing_rollback(self):
+        style = self.write(".config/waybar/style.css", "original\n")
+        self.manager.begin()
+        self.manager.deploy_static()
+        self.write_missing_generated_targets()
+        deployed = style.read_bytes()
+        real_atomic_write = self.manager._atomic_write
+
+        def publish_journal_then_raise(path, data, mode=0o644):
+            result = real_atomic_write(path, data, mode)
+            if Path(path) == self.manager.committed_manifest_path:
+                raise OSError("injected error after journal publication")
+            return result
+
+        with patch.object(
+            self.manager, "_atomic_write", side_effect=publish_journal_then_raise
+        ):
+            with self.assertRaisesRegex(OSError, "after journal publication"):
+                self.manager.commit()
+
+        self.assertTrue(self.manager.committed_manifest_path.is_file())
+        self.assertTrue(self.manager.transaction.is_dir())
+        self.assert_lifecycle_lock_unavailable()
+
+        self.manager.rollback()
+
+        manifest = json.loads(self.manager.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(style.read_bytes(), deployed)
+        self.assertEqual(
+            manifest["targets"]["waybar-style"]["deployed_checksum"],
+            hashlib.sha256(deployed).hexdigest(),
+        )
+        self.assertFalse(self.manager.committed_manifest_path.exists())
+        self.assertFalse(self.manager.transaction.exists())
+        self.assert_lifecycle_lock_available()
 
     def test_commit_recovers_directory_fsync_failure_before_journal_removal(self):
         self.manager.begin()

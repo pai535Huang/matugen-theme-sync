@@ -308,7 +308,6 @@ done <<< "$REQUIRED_OUTPUTS"
 
     def test_empty_and_relative_state_home_use_the_default_lifecycle_lock(self):
         flock_log = self.base / "flock-paths.txt"
-        release = self.base / "release-flock"
         self.write_tool(
             "flock",
             """#!/usr/bin/env bash
@@ -325,11 +324,15 @@ fi
         for directory in working_directories:
             directory.mkdir()
 
-        for state_home in ("", "relative-state"):
+        for state_index, state_home in enumerate(("", "relative-state")):
             with self.subTest(state_home=state_home):
                 flock_log.unlink(missing_ok=True)
-                release.unlink(missing_ok=True)
-                for directory in working_directories:
+                for cwd_index, directory in enumerate(working_directories):
+                    release = self.base / (
+                        f"release-flock-{state_index}-{cwd_index}"
+                    )
+                    release.unlink(missing_ok=True)
+                    expected_line_count = cwd_index + 1
                     env = os.environ.copy()
                     env.update(
                         {
@@ -355,14 +358,28 @@ fi
                     )
                     try:
                         for _ in range(30):
-                            if flock_log.exists():
+                            lines = (
+                                flock_log.read_text(encoding="utf-8").splitlines()
+                                if flock_log.exists()
+                                else []
+                            )
+                            if len(lines) >= expected_line_count:
                                 break
                             time.sleep(0.05)
-                        self.assertTrue(flock_log.exists(), "flock did not receive fd 8")
                         self.assertEqual(
-                            flock_log.read_text(encoding="utf-8").splitlines(),
-                            [str(expected)],
+                            len(lines),
+                            expected_line_count,
+                            "flock did not receive fd 8 for this invocation",
                         )
+                        self.assertEqual(
+                            lines[-1],
+                            str(expected),
+                        )
+                        with self.assertRaises(
+                            subprocess.TimeoutExpired,
+                            msg="generation did not wait for this invocation's release",
+                        ):
+                            process.wait(timeout=0.2)
                         release.touch()
                         stdout, stderr = process.communicate(timeout=3)
                         self.assertEqual(process.returncode, 0, stdout + stderr)
