@@ -93,7 +93,10 @@ automatically:
   tab-indicator, and insert-hint colors, plus the overview backdrop and
   recent-window highlight colors.
 - Waybar receives a complete managed `~/.config/waybar/style.css` that loads
-  generated `colors.css`. Its module configuration is left untouched.
+  generated `colors.css`. Its module configuration is left untouched. On each
+  theme change Waybar is restarted, because its GTK menus and tooltips are
+  initialized once at process start and only a full restart makes them pick up
+  the regenerated GTK colors.
 - Rofi receives the complete `themes/matugen.rasi` theme and a marked
   `@theme "matugen"` block in `config.rasi`; unrelated Rofi settings remain.
 - Mako receives a complete managed `~/.config/mako/config` that includes the
