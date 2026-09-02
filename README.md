@@ -67,6 +67,26 @@ Options: `--de plasma|gnome|niri` forces a desktop, and `--no-bootstrap`
 applies support files without generating a theme. `--purge` is only available
 on `uninstall`; its Niri behavior is described below.
 
+### Per-desktop service binding
+
+Each watcher is a companion of its desktop's own lifecycle unit, so it only
+starts inside that desktop's session — convenient for machines with several
+desktops installed:
+
+| Service | Parent unit | Enable link |
+| --- | --- | --- |
+| `matugen-niri.service` | `niri.service` | `~/.config/systemd/user/niri.service.wants/` |
+| `matugen-plasma.service` | `plasma-workspace.target` | `~/.config/systemd/user/plasma-workspace.target.wants/` |
+| `matugen-gnome.service` | `gnome-session.target` | `~/.config/systemd/user/gnome-session.target.wants/` |
+
+The parent unit starts the watcher when the desktop session starts and stops
+it when the session ends (the same `PartOf` pattern used for swayidle under
+Niri). Because the parent is often a system unit that user `systemctl enable`
+cannot write into, the installer creates the enable symlink directly under
+`~/.config/systemd/user/`, and `apply`/`uninstall` remove it again (also
+cleaning up any leftover `graphical-session.target.wants` link from older
+versions).
+
 ### Niri mode
 
 Niri has no compositor-wide wallpaper or light/dark switch, so this mode always

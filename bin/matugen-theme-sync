@@ -284,34 +284,87 @@ def bootstrap_command(de):
     return [str(LOCAL_BIN / "matugen-gnome-apply")]
 
 
+def service_enable_link(info_de) -> Path:
+    """Return the per-DE `.wants/` symlink that enables this watcher.
+
+    Each matugen watcher is a companion of its desktop's own lifecycle unit
+    (niri.service / plasma-workspace.target / gnome-session.target), mirroring
+    the swayidle pattern: the parent unit starts/stops the watcher with the
+    session. Because the parent is often a system unit we may not be able to
+    write into, the enable symlink lives in the user unit directory.
+    """
+    if info_de["service"] == "matugen-plasma.service":
+        parent = "plasma-workspace.target"
+    elif info_de["service"] == "matugen-gnome.service":
+        parent = "gnome-session.target"
+    elif info_de["service"] == "matugen-niri.service":
+        parent = "niri.service"
+    else:
+        raise ValueError(f"unknown service: {info_de['service']}")
+    return SYSTEMD_USER_DIR / f"{parent}.wants" / info_de["service"]
+
+
+def enable_link_target(info_de) -> Path:
+    """Return the absolute path the enable symlink points to."""
+    return SYSTEMD_USER_DIR / info_de["service"]
+
+
+def remove_legacy_enable_links(info_de) -> None:
+    """Remove the pre-per-DE `graphical-session.target.wants` enable link.
+
+    Older versions enabled every watcher from graphical-session.target; an
+    updated apply must remove that link so the watcher is not enabled twice
+    (once by the generic target, once by its desktop's own unit).
+    """
+    legacy = (
+        SYSTEMD_USER_DIR / "graphical-session.target.wants" / info_de["service"]
+    )
+    if legacy.exists() or legacy.is_symlink():
+        legacy.unlink()
+
+
 def install_service(info_de, start: bool) -> bool:
     systemctl = shutil.which("systemctl")
+    link = service_enable_link(info_de)
+    target = enable_link_target(info_de)
+
+    remove_legacy_enable_links(info_de)
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(target)
+    except OSError as exc:
+        error(f"无法创建启用软链接 {link} ({exc})")
+        return False
+
     if not systemctl:
-        warn("未找到 systemctl; 请稍后手动执行 systemctl --user enable "
-             f"{info_de['service']}")
+        warn("未找到 systemctl; 服务将仅在对应桌面会话启动时触发")
         return True
     reload_result = run([systemctl, "--user", "daemon-reload"])
     if reload_result is None or reload_result.returncode != 0:
         error("systemctl --user daemon-reload 失败")
         return False
-    command = [systemctl, "--user", "enable"]
     if start:
-        command.append("--now")
-    command.append(info_de["service"])
-    result = run(command)
-    if result is None or result.returncode != 0:
-        error(f"启用并启动服务失败: "
-              f"{(result.stderr.strip() if result else 'systemctl 不可用')}")
-        return False
-    ok(f"服务已启用并启动: {info_de['service']}")
+        start_result = run([systemctl, "--user", "start", info_de["service"]])
+        if start_result is None or start_result.returncode != 0:
+            error(f"启动服务失败: "
+                  f"{(start_result.stderr.strip() if start_result else 'systemctl 不可用')}")
+            return False
+    ok(f"服务已启用 (跟随 {link.parent.name}) 并启动: {info_de['service']}")
     return True
 
 
 def disable_service(info_de) -> None:
     systemctl = shutil.which("systemctl")
+    link = service_enable_link(info_de)
+    if link.exists() or link.is_symlink():
+        link.unlink()
+    remove_legacy_enable_links(info_de)
     if systemctl:
-        run([systemctl, "--user", "disable", "--now", info_de["service"]])
-        ok(f"已停止并禁用服务: {info_de['service']}")
+        run([systemctl, "--user", "stop", info_de["service"]])
+        run([systemctl, "--user", "daemon-reload"])
+    ok(f"已停止服务并移除启用软链接: {info_de['service']}")
 
 
 def cmd_apply(force_de=None, bootstrap=True):

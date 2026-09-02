@@ -224,6 +224,202 @@ class StateHomeResolutionTests(unittest.TestCase):
             self.assertEqual(MODULE.resolve_state_home(), Path("/tmp/custom-state"))
 
 
+class ServiceEnableDisableTests(unittest.TestCase):
+    """Each matugen watcher must be enabled as a companion of its desktop's
+    own lifecycle unit (niri.service / plasma-workspace.target /
+    gnome-session.target), mirroring the swayidle pattern: the parent unit
+    starts/stops the watcher with the session. The enable symlink lives in
+    the user unit directory so a system parent unit never needs to be
+    writable."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        self.home = self.base / "home"
+        self.systemd_user = self.home / ".config/systemd/user"
+        self.systemd_user.mkdir(parents=True)
+        self.patches = mock.patch.multiple(
+            MODULE,
+            HOME=self.home,
+            SYSTEMD_USER_DIR=self.systemd_user,
+        )
+        self.patches.start()
+        self.addCleanup(self.patches.stop)
+
+    def write_unit(self, de):
+        info_de = MODULE.DE_INFO[de]
+        unit = self.systemd_user / info_de["service"]
+        unit.parent.mkdir(parents=True, exist_ok=True)
+        unit.write_text("[Service]\n", encoding="utf-8")
+        return info_de
+
+    def fake_systemctl(self, recorded):
+        def fake_run(cmd):
+            recorded.append(cmd)
+            return mock.Mock(returncode=0, stdout="", stderr="")
+        return fake_run
+
+    def test_enable_link_path_maps_each_desktop_to_its_own_parent_unit(self):
+        expected = {
+            MODULE.DE_NIRI: "niri.service.wants",
+            MODULE.DE_PLASMA: "plasma-workspace.target.wants",
+            MODULE.DE_GNOME: "gnome-session.target.wants",
+        }
+        for de, parent_dir in expected.items():
+            with self.subTest(de=de):
+                link = MODULE.service_enable_link(MODULE.DE_INFO[de])
+                self.assertEqual(link.parent.name, parent_dir)
+                self.assertEqual(link.name, MODULE.DE_INFO[de]["service"])
+                self.assertTrue(link.is_absolute())
+
+    def test_enable_link_target_points_back_to_the_installed_unit(self):
+        for de in (MODULE.DE_NIRI, MODULE.DE_PLASMA, MODULE.DE_GNOME):
+            with self.subTest(de=de):
+                info_de = MODULE.DE_INFO[de]
+                self.assertEqual(
+                    MODULE.enable_link_target(info_de),
+                    self.systemd_user / info_de["service"],
+                )
+
+    def test_install_service_creates_per_de_wants_symlink_and_starts(self):
+        recorded = []
+        info_de = self.write_unit(MODULE.DE_NIRI)
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl(recorded)):
+            self.assertTrue(MODULE.install_service(info_de, start=True))
+        link = MODULE.service_enable_link(info_de)
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), self.systemd_user / info_de["service"])
+        self.assertIn("niri.service.wants", str(link))
+        # daemon-reload, then start
+        self.assertEqual(recorded[0], ["/usr/bin/systemctl", "--user", "daemon-reload"])
+        self.assertEqual(recorded[1], ["/usr/bin/systemctl", "--user", "start", info_de["service"]])
+
+    def test_install_service_without_start_skips_start(self):
+        recorded = []
+        info_de = self.write_unit(MODULE.DE_PLASMA)
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl(recorded)):
+            self.assertTrue(MODULE.install_service(info_de, start=False))
+        link = MODULE.service_enable_link(info_de)
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.parent.name, "plasma-workspace.target.wants")
+        self.assertEqual(
+            recorded, [["/usr/bin/systemctl", "--user", "daemon-reload"]]
+        )
+
+    def test_install_service_replaces_stale_symlink(self):
+        recorded = []
+        info_de = self.write_unit(MODULE.DE_NIRI)
+        stale = MODULE.service_enable_link(info_de)
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_text("old", encoding="utf-8")
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl(recorded)):
+            self.assertTrue(MODULE.install_service(info_de, start=False))
+        self.assertTrue(stale.is_symlink())
+        self.assertEqual(stale.resolve(), self.systemd_user / info_de["service"])
+
+    def test_install_service_without_systemctl_warms_and_returns_true(self):
+        info_de = self.write_unit(MODULE.DE_GNOME)
+        output = io.StringIO()
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value=None
+        ), mock.patch.object(MODULE, "run", side_effect=AssertionError("no systemctl call")), contextlib.redirect_stdout(output):
+            self.assertTrue(MODULE.install_service(info_de, start=True))
+        link = MODULE.service_enable_link(info_de)
+        self.assertTrue(link.is_symlink())
+        self.assertIn("gnome-session.target.wants", str(link))
+        self.assertIn("未找到 systemctl", output.getvalue())
+
+    def test_install_service_failure_reports_symlink_creation_error(self):
+        info_de = MODULE.DE_INFO[MODULE.DE_NIRI]
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(
+            MODULE, "run", side_effect=AssertionError("no systemctl call")
+        ), mock.patch.object(
+            MODULE.os, "symlink", side_effect=OSError("permission denied")
+        ), contextlib.redirect_stdout(io.StringIO()) as output:
+            result = MODULE.install_service(info_de, start=False)
+        self.assertFalse(result)
+        self.assertIn("无法创建启用软链接", output.getvalue())
+
+    def test_install_service_removes_legacy_graphical_session_link(self):
+        """Applying an update must also remove the old graphical-session
+        enable link, otherwise the watcher is enabled twice (upgrade path)."""
+        info_de = self.write_unit(MODULE.DE_NIRI)
+        legacy_dir = self.systemd_user / "graphical-session.target.wants"
+        legacy_dir.mkdir(parents=True)
+        legacy_link = legacy_dir / info_de["service"]
+        legacy_link.symlink_to(self.systemd_user / info_de["service"])
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl([])):
+            self.assertTrue(MODULE.install_service(info_de, start=False))
+        self.assertFalse(legacy_link.exists())
+        self.assertFalse(legacy_link.is_symlink())
+        # 新链接仍然创建成功
+        self.assertTrue(MODULE.service_enable_link(info_de).is_symlink())
+
+    def test_disable_service_removes_link_and_stops(self):
+        recorded = []
+        info_de = self.write_unit(MODULE.DE_NIRI)
+        link = MODULE.service_enable_link(info_de)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(self.systemd_user / info_de["service"])
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl(recorded)):
+            MODULE.disable_service(info_de)
+        self.assertFalse(link.exists())
+        self.assertFalse(link.is_symlink())
+        self.assertEqual(
+            recorded,
+            [
+                ["/usr/bin/systemctl", "--user", "stop", info_de["service"]],
+                ["/usr/bin/systemctl", "--user", "daemon-reload"],
+            ],
+        )
+
+    def test_disable_service_cleans_up_legacy_graphical_session_link(self):
+        info_de = MODULE.DE_INFO[MODULE.DE_PLASMA]
+        legacy_dir = self.systemd_user / "graphical-session.target.wants"
+        legacy_dir.mkdir(parents=True)
+        legacy_link = legacy_dir / info_de["service"]
+        legacy_link.symlink_to(self.systemd_user / info_de["service"])
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl([])):
+            MODULE.disable_service(info_de)
+        self.assertFalse(legacy_link.exists())
+        self.assertFalse(legacy_link.is_symlink())
+
+    def test_disable_service_without_systemctl_still_removes_links(self):
+        info_de = MODULE.DE_INFO[MODULE.DE_GNOME]
+        link = MODULE.service_enable_link(info_de)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(self.systemd_user / info_de["service"])
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value=None
+        ), mock.patch.object(MODULE, "run", side_effect=AssertionError("no systemctl call")):
+            MODULE.disable_service(info_de)
+        self.assertFalse(link.exists())
+
+    def test_disable_service_missing_link_is_idempotent(self):
+        info_de = MODULE.DE_INFO[MODULE.DE_PLASMA]
+        with mock.patch.object(
+            MODULE.shutil, "which", return_value="/usr/bin/systemctl"
+        ), mock.patch.object(MODULE, "run", side_effect=self.fake_systemctl([])):
+            MODULE.disable_service(info_de)  # must not raise
+        self.assertFalse(MODULE.service_enable_link(info_de).exists())
+
+
+
 class NiriCommandTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

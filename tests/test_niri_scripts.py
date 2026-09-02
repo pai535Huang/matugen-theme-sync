@@ -654,20 +654,20 @@ exit "${status:-1}"
         self.assertEqual(self.call_lines(), ["<wallpaper>", "</wallpapers/one.png>"])
         self.assertIn("Niri exited", result.stderr)
 
-    def test_service_is_bound_to_the_graphical_session_lifecycle(self):
+    def test_service_is_bound_to_the_niri_lifecycle(self):
         parser = configparser.RawConfigParser(interpolation=None)
         parser.read(NIRI_UNIT, encoding="utf-8")
 
         self.assertIn(
-            "graphical-session.target",
+            "niri.service",
             parser.get("Unit", "PartOf", fallback="").split(),
         )
         self.assertIn(
-            "graphical-session.target",
+            "niri.service",
             parser.get("Unit", "After", fallback="").split(),
         )
         self.assertIn(
-            "graphical-session.target",
+            "niri.service",
             parser.get("Install", "WantedBy", fallback="").split(),
         )
         self.assertEqual(parser.get("Service", "Restart"), "on-failure")

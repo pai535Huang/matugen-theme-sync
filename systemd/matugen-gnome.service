@@ -1,6 +1,7 @@
 [Unit]
 Description=Synchronize Matugen themes with GNOME wallpaper
-After=graphical-session.target
+After=gnome-session.target
+PartOf=gnome-session.target
 
 [Service]
 ExecStart=%h/.local/bin/matugen-gnome-watch
@@ -8,4 +9,4 @@ Restart=on-failure
 RestartSec=3
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=gnome-session.target
