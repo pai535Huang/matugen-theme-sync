@@ -260,20 +260,93 @@ set_gsetting() {
   fi
 }
 
+# Replace one key of a simple INI file, preserving every other line. Creates
+# the file (with a [Settings] header) when it does not exist yet.
+set_ini_key() {
+  local file="$1" key="$2" value="$3" tmp
+  if [[ ! -f "$file" ]]; then
+    mkdir -p "$(dirname "$file")" || return 1
+    printf '[Settings]\n%s=%s\n' "$key" "$value" > "$file" || return 1
+    return 0
+  fi
+  tmp="$(mktemp "$file.tmp.XXXXXX")" || return 1
+  if ! awk -v key="$key" -v value="$value" '
+    { lines[++n] = $0; if ($0 ~ "^[ \t]*\\[Settings\\][ \t]*$") has_group = 1 }
+    END {
+      # Without a [Settings] group every existing line would fall outside it,
+      # so the header goes first and the original content follows unchanged.
+      if (!has_group) print "[Settings]"
+      for (i = 1; i <= n; i++) {
+        if (!done && lines[i] ~ "^[ \t]*" key "[ \t]*=") {
+          print key "=" value
+          done = 1
+          continue
+        }
+        print lines[i]
+      }
+      if (!done) print key "=" value
+    }
+  ' "$file" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$file"
+}
+
+# Same for the xsettingsd configuration format ("Key value", strings quoted).
+set_xsetting_value() {
+  local file="$1" key="$2" value="$3" tmp
+  [[ -f "$file" ]] || return 0
+  tmp="$(mktemp "$file.tmp.XXXXXX")" || return 1
+  if ! awk -v key="$key" -v value="$value" '
+    BEGIN { done = 0 }
+    $1 == key { if (!done) { print key " " value; done = 1 } next }
+    { print }
+    END { if (!done) print key " " value }
+  ' "$file" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$file"
+}
+
 apply_gtk_mode() {
-  local mode="$1" gtk_theme color_scheme failed=0
+  local mode="$1" gtk_theme color_scheme prefer_dark dark_flag failed=0
+  local gtk_settings xsettingsd_conf
   if [[ "$mode" == light ]]; then
     gtk_theme="adw-gtk3"
     color_scheme="prefer-light"
+    prefer_dark="false"
+    dark_flag=0
   else
     gtk_theme="adw-gtk3-dark"
     color_scheme="prefer-dark"
+    prefer_dark="true"
+    dark_flag=1
   fi
 
   set_gsetting org.gnome.desktop.interface color-scheme "$color_scheme" || failed=1
   # Re-selecting the theme makes GTK3 notice regenerated colors.css files.
   set_gsetting org.gnome.desktop.interface gtk-theme "" || true
   set_gsetting org.gnome.desktop.interface gtk-theme "$gtk_theme" || failed=1
+
+  # GTK on Plasma does not read dconf: GTK3/GTK4 take the theme name and the
+  # dark preference from settings.ini, so writing only dconf left every GTK
+  # app (Google Chrome's GTK theme mode included) on the previous variant.
+  for gtk_settings in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
+    set_ini_key "$gtk_settings" gtk-theme-name "$gtk_theme" || failed=1
+    set_ini_key "$gtk_settings" gtk-application-prefer-dark-theme "$prefer_dark" || failed=1
+  done
+
+  # Keep the XSETTINGS daemon in sync when one is configured, and reload it.
+  xsettingsd_conf="$HOME/.config/xsettingsd/xsettingsd.conf"
+  if [[ -f "$xsettingsd_conf" ]]; then
+    set_xsetting_value "$xsettingsd_conf" Net/ThemeName "\"$gtk_theme\"" || failed=1
+    set_xsetting_value "$xsettingsd_conf" Gtk/ApplicationPreferDarkTheme "$dark_flag" || failed=1
+    if pgrep -x xsettingsd >/dev/null 2>&1; then
+      pkill -HUP -x xsettingsd || log "Could not reload xsettingsd"
+    fi
+  fi
   return "$failed"
 }
 
@@ -321,12 +394,37 @@ reload_cava() {
 }
 
 reload_kitty() {
-  pgrep -x kitty >/dev/null 2>&1 || return 0
-  if command -v kitty >/dev/null 2>&1 \
-    && kitty +kitten themes --reload-in=all Matugen >/dev/null 2>&1; then
-    return 0
+  local theme="$HOME/.config/kitty/themes/Matugen.conf"
+  local current="$HOME/.config/kitty/current-theme.conf"
+  local conf="$HOME/.config/kitty/kitty.conf"
+
+  if [[ ! -f "$theme" ]]; then
+    log "kitty theme file is missing: $theme"
+    return 1
   fi
-  pkill -SIGUSR1 kitty 2>/dev/null
+
+  # Materialise the theme the way `kitten themes` does, minus the theme database
+  # download. The kitten loads its database before writing anything, so with a
+  # stale cache and no network it exits without touching current-theme.conf;
+  # calling it here used to turn that into a silent no-op.
+  if ! cp -f "$theme" "$current.tmp" || ! mv -f "$current.tmp" "$current"; then
+    log "Could not write kitty theme file: $current"
+    return 1
+  fi
+
+  if [[ -f "$conf" ]] \
+    && ! grep -Eq '^[[:space:]]*include[[:space:]]+current-theme\.conf' "$conf"; then
+    log "kitty.conf has no 'include current-theme.conf' line; kitty will not use $current"
+  fi
+
+  if pgrep -x kitty >/dev/null 2>&1; then
+    if ! pkill -SIGUSR1 -x kitty; then
+      log "Could not signal kitty to reload"
+      return 1
+    fi
+  else
+    log "kitty is not running; theme stored for its next launch"
+  fi
 }
 
 reload_nvim() {

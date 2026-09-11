@@ -87,6 +87,45 @@ cannot write into, the installer creates the enable symlink directly under
 cleaning up any leftover `graphical-session.target.wants` link from older
 versions).
 
+### KDE Plasma mode
+
+The colour scheme selected in System Settings (`MatugenLight` or
+`MatugenDark`) is the source of truth. The watcher reacts to `kdeglobals` and
+to wallpaper changes and re-applies every managed application from the same
+palette; a non-Matugen scheme disables synchronization.
+
+#### Managed application themes
+
+- GTK 3 and GTK 4 receive generated `~/.config/gtk-3.0/{gtk.css,colors.css}`
+  and `~/.config/gtk-4.0/{gtk.css,colors.css}`. Plasma's GTK applications do
+  **not** read dconf, so the light/dark choice is also written where they
+  actually look: `gtk-theme-name` and `gtk-application-prefer-dark-theme` in
+  `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini`
+  (`adw-gtk3` for light, `adw-gtk3-dark` for dark), and `Net/ThemeName` plus
+  `Gtk/ApplicationPreferDarkTheme` in `~/.config/xsettingsd/xsettingsd.conf`
+  when that file exists — followed by a `SIGHUP` to a running `xsettingsd`.
+  Every other line of those files is preserved. The
+  `org.gnome.desktop.interface` GSettings keys are still written for the
+  settings portal and other consumers. Without the `settings.ini` step, GTK
+  applications — Google Chrome's GTK theme mode included — keep the previous
+  variant whatever colour scheme is selected, because no KDE GTK bridge
+  (`kcm_gtk`, `kded` GTK/XSettings modules) is installed.
+- Kitty receives the generated `~/.config/kitty/themes/Matugen.conf`, which is
+  copied over `~/.config/kitty/current-theme.conf` and applied with `SIGUSR1`.
+  The copy is deliberate: `kitten themes` loads its theme database from the
+  network before writing anything, so a stale cache plus an unavailable
+  network makes it exit without touching the file — which used to turn theme
+  switches into silent no-ops. A `kitty.conf` without
+  `include current-theme.conf` is reported, and a failed reload is reported
+  instead of being swallowed.
+- Neovim, btop and cava are signalled (`SIGUSR1`/`SIGUSR2`), tmux is reloaded
+  when a server is running, and the Starship palette block is rewritten.
+  Zellij, Yazi, Obsidian, qt5ct/qt6ct and a new shell pick their files up on
+  their next launch.
+- Qt colours are not regenerated in Plasma mode: the `qt5ct`/`qt6ct` templates
+  are disabled in `matugen/config-plasma.toml`, so Qt applications keep the
+  palette from whenever those files were last written.
+
 ### Niri mode
 
 Niri has no compositor-wide wallpaper or light/dark switch, so this mode always
