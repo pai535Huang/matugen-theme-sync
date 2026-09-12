@@ -119,9 +119,21 @@ palette; a non-Matugen scheme disables synchronization.
   `include current-theme.conf` is reported, and a failed reload is reported
   instead of being swallowed.
 - Neovim, btop and cava are signalled (`SIGUSR1`/`SIGUSR2`), tmux is reloaded
-  when a server is running, and the Starship palette block is rewritten.
+  when a server is running, and Starship follows the new colours.
   Zellij, Yazi, Obsidian, qt5ct/qt6ct and a new shell pick their files up on
   their next launch.
+- Starship needs two things from `~/.config/starship.toml`, and gets both: the
+  generated palette is copied into the `# BEGIN MATUGEN PALETTE` …
+  `# END MATUGEN PALETTE` block, and the top-level `palette = "matugen"` key is
+  set so Starship actually selects it — rewriting the block alone left the
+  previous palette (for example a Noctalia block written by another tool) in
+  charge. That key has to sit before the first table header, so it is written
+  in the file's key section rather than next to the managed block. The palette
+  carries both the positional `color0`…`color9` roles and the names Starship's
+  default styles reference (`cyan`, `purple`, `red`, `green`, …), mapped onto
+  Material roles: without the latter the prompt falls back to the terminal's
+  own ANSI colours. A `starship.toml` without the marker comment pair is left
+  untouched, since the block has nothing to rewrite.
 - Qt colours are not regenerated in Plasma mode: the `qt5ct`/`qt6ct` templates
   are disabled in `matugen/config-plasma.toml`, so Qt applications keep the
   palette from whenever those files were last written.

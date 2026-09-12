@@ -96,19 +96,41 @@ update_starship_palette() {
     return 0
   fi
 
+  # Every entry of the generated palette, not just the positional colours:
+  # Starship resolves a style's colour name through the active palette, so the
+  # names its default styles reference (cyan, purple, red, ...) are part of it.
   local palette_block
   palette_block="$(awk '
     /^\[palettes\.[^]]+\]/ { in_pal = 1; print; next }
     in_pal && /^\[/ { exit }
-    in_pal && /^color[0-9]/ { print }
+    in_pal && (/^[[:space:]]*#/ || /^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*=/) { print }
   ' "$generated")"
 
   if [[ -z "$palette_block" ]]; then
     return 0
   fi
 
-  awk -v new="$palette_block" '
-    BEGIN { in_block = 0; in_pal = 0 }
+  local palette_name
+  palette_name="$(awk -F'[][]' '/^\[palettes\./ { sub(/^palettes\./, "", $2); print $2; exit }' "$generated")"
+  if [[ -z "$palette_name" ]]; then
+    return 0
+  fi
+
+  awk -v new="$palette_block" -v name="$palette_name" '
+    BEGIN { in_block = 0; in_pal = 0; in_keys = 1; key_done = 0 }
+    # Starship picks the active palette with this top-level key. TOML only
+    # accepts it before the first table header, and the managed block sits
+    # after other tables, so the key is written in the key section instead.
+    in_keys && /^[[:space:]]*palette[[:space:]]*=/ {
+      print "palette = \"" name "\""
+      key_done = 1
+      next
+    }
+    in_keys && !key_done && /^\[/ {
+      print "palette = \"" name "\""
+      key_done = 1
+      in_keys = 0
+    }
     /^# BEGIN MATUGEN PALETTE$/ { in_block = 1; print; next }
     /^# END MATUGEN PALETTE$/ { in_block = 0; print; next }
     in_block && /^\[palettes\.[^]]+\]$/ {
@@ -119,6 +141,7 @@ update_starship_palette() {
     in_block && in_pal && /^\[/ { in_pal = 0 }
     in_block && in_pal { next }
     { print }
+    END { if (!key_done) print "palette = \"" name "\"" }
   ' "$config" > "$config.tmp"
 
   mv "$config.tmp" "$config"

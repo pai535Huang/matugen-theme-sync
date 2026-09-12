@@ -1,7 +1,9 @@
 import os
+import re
 import shlex
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -80,6 +82,41 @@ Gtk/FontName "Adwaita Sans,  11"
 Net/IconThemeName "breeze"
 Net/ThemeName "adw-gtk3"
 """
+
+# What matugen writes for this run: positional colours plus the names
+# Starship's default styles reference.
+STARSHIP_COLORS = """[palettes.matugen]
+color0 = '#fdf8fb'
+color3 = '#1f1637'
+cyan = '#ba1a1a'
+purple = '#615c6c'
+"""
+
+# The shape of the real ~/.config/starship.toml: a stale third-party palette
+# block sits next to the managed one, and the active palette is selected by a
+# top-level key that must stay outside every table.
+STARSHIP_CONF = """\"$schema\" = 'https://starship.rs/config-schema.json'
+palette = "noctalia"
+
+[azure]
+symbol = "☁️ "
+
+# BEGIN MATUGEN PALETTE
+[palettes.matugen]
+color0 = '#000000'
+color3 = '#111111'
+cyan = '#222222'
+# END MATUGEN PALETTE
+
+# >>> NOCTALIA STARSHIP PALETTE >>>
+[palettes.noctalia]
+cyan = "#b9cbbf"
+# <<< NOCTALIA STARSHIP PALETTE <<<
+"""
+
+STARSHIP_CONF_WITHOUT_PALETTE_KEY = STARSHIP_CONF.replace(
+    'palette = "noctalia"\n', "", 1
+)
 
 
 def parse_ini(text):
@@ -196,6 +233,9 @@ class PlasmaApplyTestCase(unittest.TestCase):
             + "\nprintf '%s' "
             + shlex.quote(KITTY_THEME)
             + ' > "$HOME/.config/kitty/themes/Matugen.conf"\n'
+            + "printf '%s' "
+            + shlex.quote(STARSHIP_COLORS)
+            + ' > "$HOME/.config/matugen/themes/starship-colors.toml"\n'
             + "exit 0\n",
         )
         self.write_tool(
@@ -410,6 +450,80 @@ class GtkModeTests(PlasmaApplyTestCase):
         log = self.read_log("gsettings")
         self.assertIn("color-scheme prefer-light", log)
         self.assertIn("gtk-theme adw-gtk3", log)
+
+
+class StarshipPaletteTests(PlasmaApplyTestCase):
+    """Starship only follows the wallpaper if the apply selects the palette."""
+
+    def setUp(self):
+        super().setUp()
+        self.starship = self.home / ".config/starship.toml"
+        self.starship.write_text(STARSHIP_CONF, encoding="utf-8")
+
+    def read_starship(self):
+        return self.starship.read_text(encoding="utf-8")
+
+    def starship_config(self):
+        return tomllib.loads(self.read_starship())
+
+    def test_apply_selects_the_generated_palette(self):
+        result = self.apply_light()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.starship_config()["palette"], "matugen")
+
+    def test_generated_entries_replace_the_managed_block(self):
+        result = self.apply_light()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.starship_config()["palettes"]["matugen"],
+            {
+                "color0": "#fdf8fb",
+                "color3": "#1f1637",
+                "cyan": "#ba1a1a",
+                "purple": "#615c6c",
+            },
+        )
+
+    def test_unrelated_keys_and_other_palettes_survive(self):
+        result = self.apply_light()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = self.starship_config()
+        self.assertEqual(config["azure"]["symbol"], "☁️ ")
+        self.assertEqual(config["palettes"]["noctalia"], {"cyan": "#b9cbbf"})
+        self.assertIn('"$schema"', self.read_starship())
+        self.assertIn("# >>> NOCTALIA STARSHIP PALETTE >>>", self.read_starship())
+
+    def test_palette_key_is_inserted_when_the_config_has_none(self):
+        self.starship.write_text(
+            STARSHIP_CONF_WITHOUT_PALETTE_KEY, encoding="utf-8"
+        )
+        result = self.apply_light()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.starship_config()["palette"], "matugen")
+        text = self.read_starship()
+        key_line = next(
+            index
+            for index, line in enumerate(text.splitlines())
+            if re.match(r"^palette\s*=", line)
+        )
+        first_table = next(
+            index
+            for index, line in enumerate(text.splitlines())
+            if line.startswith("[")
+        )
+        self.assertLess(key_line, first_table)
+
+    def test_repeated_apply_keeps_a_single_palette_key(self):
+        self.assertEqual(self.apply_light().returncode, 0)
+        first = self.read_starship()
+        self.assertEqual(self.apply_light().returncode, 0)
+        self.assertEqual(self.read_starship(), first)
+        keys = [
+            line
+            for line in self.read_starship().splitlines()
+            if re.match(r"^palette\s*=", line)
+        ]
+        self.assertEqual(keys, ['palette = "matugen"'])
 
 
 if __name__ == "__main__":

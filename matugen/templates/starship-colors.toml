@@ -1,3 +1,15 @@
+# Starship palette generated from the wallpaper.
+#
+# Starship selects a palette with the top-level `palette = "matugen"` key,
+# which matugen-theme-sync keeps in sync in ~/.config/starship.toml; the block
+# below is copied into the managed `# BEGIN MATUGEN PALETTE` section there.
+#
+# Starship resolves every colour name a style mentions through the active
+# palette, so entries named after its built-in colours replace what the
+# default modules render. Without them the prompt falls back to the terminal's
+# own ANSI colours and stops following the wallpaper.
+
+# Positional colours, kept for configurations that reference fg:color0..color9.
 [palettes.matugen]
 color0 = '{{colors.surface.default.hex}}'
 color1 = '{{colors.surface_container.default.hex}}'
@@ -9,3 +21,29 @@ color6 = '{{colors.error.default.hex}}'
 color7 = '{{colors.on_surface.default.hex}}'
 color8 = '{{colors.outline.default.hex}}'
 color9 = '{{colors.on_surface_variant.default.hex}}'
+
+# Names used by Starship's default styles (directory, git branch, git status,
+# language versions, battery), mapped onto Material 3 roles. Container roles
+# give the bright variants a distinct tint instead of a copy of their base.
+cyan = '{{colors.primary.default.hex}}'
+blue = '{{colors.primary.default.hex}}'
+bright-cyan = '{{colors.primary_container.default.hex}}'
+bright-blue = '{{colors.primary_container.default.hex}}'
+
+purple = '{{colors.secondary.default.hex}}'
+magenta = '{{colors.secondary.default.hex}}'
+bright-purple = '{{colors.secondary_container.default.hex}}'
+bright-magenta = '{{colors.secondary_container.default.hex}}'
+
+green = '{{colors.tertiary.default.hex}}'
+bright-green = '{{colors.tertiary_container.default.hex}}'
+yellow = '{{colors.tertiary_container.default.hex}}'
+bright-yellow = '{{colors.tertiary_container.default.hex}}'
+
+red = '{{colors.error.default.hex}}'
+bright-red = '{{colors.error.default.hex}}'
+
+white = '{{colors.on_surface.default.hex}}'
+bright-white = '{{colors.on_surface.default.hex}}'
+black = '{{colors.surface.default.hex}}'
+bright-black = '{{colors.outline.default.hex}}'

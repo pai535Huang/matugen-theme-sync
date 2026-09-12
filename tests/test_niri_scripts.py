@@ -3,10 +3,12 @@ import fcntl
 import importlib.util
 import json
 import os
+import re
 import shlex
 import subprocess
 import tempfile
 import time
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -41,6 +43,36 @@ REQUIRED_OUTPUTS = (
     ".config/yazi/theme.toml",
     ".config/matugen/themes/obsidian.css",
 )
+
+# What matugen writes for this run: positional colours plus the names
+# Starship's default styles reference.
+STARSHIP_COLORS = """[palettes.matugen]
+color0 = '#121412'
+color3 = '#4a4459'
+cyan = '#b9c6ec'
+purple = '#a5d0b8'
+"""
+
+# The shape of the real ~/.config/starship.toml: a stale third-party palette
+# block sits next to the managed one, and the active palette is selected by a
+# top-level key that must stay outside every table.
+STARSHIP_CONF = """\"$schema\" = 'https://starship.rs/config-schema.json'
+palette = "noctalia"
+
+[azure]
+symbol = "☁️ "
+
+# BEGIN MATUGEN PALETTE
+[palettes.matugen]
+color0 = '#000000'
+cyan = '#222222'
+# END MATUGEN PALETTE
+
+# >>> NOCTALIA STARSHIP PALETTE >>>
+[palettes.noctalia]
+cyan = "#b9cbbf"
+# <<< NOCTALIA STARSHIP PALETTE <<<
+"""
 
 
 class NiriApplyTestCase(unittest.TestCase):
@@ -788,6 +820,84 @@ done <<< "$REQUIRED_OUTPUTS"
                 process.communicate()
 
         self.assertEqual(process.returncode, 0, stderr)
+
+
+class NiriStarshipPaletteTests(NiriApplyTestCase):
+    """Starship only follows the wallpaper if the apply selects the palette."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_tool(
+            "matugen",
+            "#!/usr/bin/env bash\nset -e\n"
+            'while IFS= read -r output; do\n'
+            '  [[ -n "$output" ]] || continue\n'
+            '  mkdir -p "$(dirname "$HOME/$output")"\n'
+            '  : > "$HOME/$output"\n'
+            "done <<< \"$REQUIRED_OUTPUTS\"\n"
+            "cat > \"$HOME/.config/matugen/themes/starship-colors.toml\" <<'EOF'\n"
+            + STARSHIP_COLORS
+            + "EOF\n",
+        )
+        # The live reload path must not touch the real session: no process is
+        # matched, no GNOME setting is written, no tmux server is contacted.
+        self.write_tool("pgrep", "#!/usr/bin/env bash\nexit 1\n")
+        self.write_tool("pkill", "#!/usr/bin/env bash\nexit 0\n")
+        self.write_tool("gsettings", "#!/usr/bin/env bash\nexit 0\n")
+        self.write_tool("tmux", "#!/usr/bin/env bash\nexit 1\n")
+        self.starship = self.home / ".config/starship.toml"
+        self.starship.parent.mkdir(parents=True, exist_ok=True)
+        self.starship.write_text(STARSHIP_CONF, encoding="utf-8")
+
+    def read_starship(self):
+        return self.starship.read_text(encoding="utf-8")
+
+    def starship_config(self):
+        return tomllib.loads(self.read_starship())
+
+    def apply(self):
+        return self.run_script(
+            "manual",
+            str(self.spaced),
+            REQUIRED_OUTPUTS="\n".join(REQUIRED_OUTPUTS),
+        )
+
+    def test_apply_selects_the_generated_palette(self):
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.starship_config()["palette"], "matugen")
+
+    def test_generated_entries_replace_the_managed_block(self):
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.starship_config()["palettes"]["matugen"],
+            {
+                "color0": "#121412",
+                "color3": "#4a4459",
+                "cyan": "#b9c6ec",
+                "purple": "#a5d0b8",
+            },
+        )
+
+    def test_unrelated_keys_and_other_palettes_survive(self):
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        config = self.starship_config()
+        self.assertEqual(config["azure"]["symbol"], "☁️ ")
+        self.assertEqual(config["palettes"]["noctalia"], {"cyan": "#b9cbbf"})
+
+    def test_palette_key_precedes_the_first_table(self):
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.read_starship().splitlines()
+        key_line = next(
+            index for index, line in enumerate(lines) if re.match(r"^palette\s*=", line)
+        )
+        first_table = next(
+            index for index, line in enumerate(lines) if line.startswith("[")
+        )
+        self.assertLess(key_line, first_table)
 
 
 if __name__ == "__main__":

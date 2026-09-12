@@ -353,18 +353,36 @@ apply_gtk_mode() {
 update_starship_palette() {
   local generated="$HOME/.config/matugen/themes/starship-colors.toml"
   local config="$HOME/.config/starship.toml"
-  local palette_block
+  local palette_block palette_name
 
   [[ -f "$generated" && -f "$config" ]] || return 0
+  # Every entry of the generated palette, not just the positional colours:
+  # Starship resolves a style's colour name through the active palette, so the
+  # names its default styles reference (cyan, purple, red, ...) are part of it.
   palette_block="$(awk '
     /^\[palettes\.[^]]+\]/ { in_palette = 1; print; next }
     in_palette && /^\[/ { exit }
-    in_palette && /^color[0-9]/ { print }
+    in_palette && (/^[[:space:]]*#/ || /^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*=/) { print }
   ' "$generated")"
   [[ -n "$palette_block" ]] || return 0
+  palette_name="$(awk -F'[][]' '/^\[palettes\./ { sub(/^palettes\./, "", $2); print $2; exit }' "$generated")"
+  [[ -n "$palette_name" ]] || return 0
 
-  awk -v new="$palette_block" '
-    BEGIN { in_block = 0; in_palette = 0 }
+  awk -v new="$palette_block" -v name="$palette_name" '
+    BEGIN { in_block = 0; in_palette = 0; in_keys = 1; key_done = 0 }
+    # Starship picks the active palette with this top-level key. TOML only
+    # accepts it before the first table header, and the managed block sits
+    # after other tables, so the key is written in the key section instead.
+    in_keys && /^[[:space:]]*palette[[:space:]]*=/ {
+      print "palette = \"" name "\""
+      key_done = 1
+      next
+    }
+    in_keys && !key_done && /^\[/ {
+      print "palette = \"" name "\""
+      key_done = 1
+      in_keys = 0
+    }
     /^# BEGIN MATUGEN PALETTE$/ { in_block = 1; print; next }
     /^# END MATUGEN PALETTE$/ { in_block = 0; print; next }
     in_block && /^\[palettes\.[^]]+\]$/ {
@@ -375,6 +393,7 @@ update_starship_palette() {
     in_block && in_palette && /^\[/ { in_palette = 0 }
     in_block && in_palette { next }
     { print }
+    END { if (!key_done) print "palette = \"" name "\"" }
   ' "$config" > "$config.tmp"
   mv "$config.tmp" "$config"
 }
