@@ -456,6 +456,20 @@ reload_btop() {
   pkill -USR2 btop 2>/dev/null
 }
 
+# PywalFox renders browser chrome (Firefox, Zen, Thunderbird) from the palette
+# that the pywalfox template writes. Its light and dark templates both derive
+# their colours from a standard dark-convention palette, so the palette alone
+# never switches the rendered mode: the mode has to follow the desktop.
+sync_pywalfox() {
+  local mode="$1"
+  command -v pywalfox >/dev/null 2>&1 || return 0
+  if ! timeout 15 pywalfox "$mode" >/dev/null 2>&1; then
+    log "Could not set PywalFox theme mode to $mode"
+    return 1
+  fi
+  timeout 15 pywalfox update >/dev/null 2>&1 || log "Could not push the palette to PywalFox"
+}
+
 apply_kde_scheme() {
   local mode="$1" scheme selected_mode
   command -v plasma-apply-colorscheme >/dev/null 2>&1 || return 0
@@ -608,6 +622,7 @@ reload_nvim || sync_ok=0
 reload_btop || sync_ok=0
 reload_cava || sync_ok=0
 reload_tmux || sync_ok=0
+sync_pywalfox "$mode" || sync_ok=0
 
 # A scheme-triggered run starts after System Settings has already selected it.
 # Wallpaper refreshes must force KDE to reload the regenerated file.
