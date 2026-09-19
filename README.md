@@ -19,6 +19,14 @@ Generate wallpaper-derived light/dark themes with [matugen](https://github.com/I
 - Niri: `niri`, either `awww` or legacy `swww`, and optionally `makoctl`, `waybar`, `rofi`
 - GUI: `python-gobject`, `gtk4`, `libadwaita`
 
+The Python side runs on the distribution interpreter on purpose, not in a
+virtualenv: beyond the standard library the only imports are `gi`, its
+`Gtk-4.0`/`Adw-1` typelibs, and the project's own `niri_integration`. PyGObject
+publishes sdist-only on PyPI, so a venv copy compiles against the system GLib
+and still reads the distribution's typelibs — the venv buys nothing and adds a
+build step plus an ABI pairing to maintain. Install `python-gobject` (and
+`gtk4` plus `libadwaita` for `show-ui`) with your package manager.
+
 The installer checks for `matugen` before writing any project files. If it is
 missing, it asks for confirmation with a safe `[y/N]` default, detects the
 available package manager, and uses the matching flow:
