@@ -70,8 +70,9 @@ output_path = "~/.config/qt6ct/colors/matugen.conf"
 
 [templates.pywalfox]
 input_path = "~/.config/matugen/templates/pywalfox-colors.json"
+input_path_modes = { light = "~/.config/matugen/templates/pywalfox-colors-light.json", dark = "~/.config/matugen/templates/pywalfox-colors.json" }
 output_path = "~/.cache/wal/colors.json"
-post_hook = "pywalfox update >/dev/null 2>&1 || true"
+post_hook = "if command -v pywalfox >/dev/null 2>&1; then timeout 15 pywalfox {{mode}} && timeout 15 pywalfox update; fi"
 
 [templates.niri]
 input_path = "~/.config/matugen/templates/niri-colors.kdl"

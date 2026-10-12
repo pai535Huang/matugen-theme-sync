@@ -146,6 +146,55 @@ palette; a non-Matugen scheme disables synchronization.
   are disabled in `matugen/config-plasma.toml`, so Qt applications keep the
   palette from whenever those files were last written.
 
+### Pywalfox palettes and mode
+
+Pywalfox derives both interface modes from a palette whose `color0` is dark
+and `color7`/`color15` are light. Passing a conventional light terminal palette
+reverses its foreground/background mapping. The light input template therefore
+uses Matugen's light-mode `on_surface` for the dark base and `surface` for the
+light text slots; accent colors still follow the selected Matugen mode. The dark
+input template uses the selected mode's normal surface/text roles. Both use
+`colors.*.default` and current color names, avoiding empty colors with Matugen 4.
+This shared `~/.cache/wal/colors.json` follows Pywalfox's input convention even
+when the desktop is light; consumers expecting a light terminal palette should
+use a separate output.
+
+Plasma's apply script sets the Pywalfox mode and requests a refresh after
+successful generation. GNOME and Niri use bounded template hooks for the same
+mode-then-refresh sequence; Niri generates dark mode. Pywalfox is optional.
+Disable other theme generators' Pywalfox integration (for example Noctalia's)
+to prevent them from overwriting the shared palette.
+
+#### Optional Thunderbird compatibility fixes
+
+These are manual, application-specific workarounds, not installed by this
+project. In an affected Thunderbird 157.0.1 installation, the theme loader sets
+`--lwt-accent-color`, while toolbar/status-bar CSS reads `--lwt-frame`. Enabling
+Pywalfox can consequently expose a transparent window background. Separately,
+Pywalfox 2.0.11 maps highlighted text to its dark focus text in light mode;
+Thunderbird reuses that pair for primary buttons and the active spaces icon.
+
+If affected, merge the relevant rules into the active Thunderbird profile's
+`chrome/userChrome.css` and enable
+`toolkit.legacyUserProfileCustomizations.stylesheets` in Thunderbird's config
+editor. Restart Thunderbird after editing:
+
+```css
+/* Only needed when the theme loader and UI use different frame variables. */
+:root[lwtheme] {
+  --lwt-frame: var(--lwt-accent-color);
+}
+
+/* For Matugen's dark light-mode accents and light dark-mode accents. */
+:root[lwtheme] {
+  --sidebar-highlight-text-color: light-dark(#ffffff, #111416) !important;
+}
+```
+
+The contrast rule assumes the default Pywalfox accent mapping used here;
+custom palettes may need different foreground colors. Reassess these rules
+after Thunderbird/Pywalfox updates and remove each workaround once unnecessary.
+
 ### Niri mode
 
 Niri has no compositor-wide wallpaper or light/dark switch, so this mode always

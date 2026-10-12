@@ -70,8 +70,9 @@ output_path = "~/.config/matugen/themes/obsidian.css"
 
 [templates.pywalfox]
 input_path = "~/.config/matugen/templates/pywalfox-colors.json"
+input_path_modes = { light = "~/.config/matugen/templates/pywalfox-colors-light.json", dark = "~/.config/matugen/templates/pywalfox-colors.json" }
 output_path = "~/.cache/wal/colors.json"
-post_hook = "pywalfox update >/dev/null 2>&1 || true"
+# matugen-plasma-apply sets the mode and refreshes Pywalfox after generation.
 
 [templates.kde_color_scheme_light]
 input_path = "~/.config/matugen/templates/kde-colors-light.colors"
