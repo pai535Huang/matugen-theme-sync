@@ -28,7 +28,6 @@ fi
 
 trap 'log "Niri wallpaper watcher stopped"; exit 0' TERM INT
 
-last_image=""
 polls=0
 log "Watching Niri wallpaper daemon every ${INTERVAL}s"
 
@@ -39,10 +38,10 @@ while true; do
   fi
 
   if image="$("$APPLY" --print-wallpaper 2>/dev/null)"; then
-    if [[ -n "$image" && "$image" != "$last_image" ]]; then
-      if "$APPLY" wallpaper "$image"; then
-        last_image="$image"
-      else
+    if [[ -n "$image" ]]; then
+      # The apply helper checks image/template hashes and required outputs.
+      # Checking every poll also repairs deleted outputs and same-path edits.
+      if ! "$APPLY" wallpaper "$image"; then
         log "Theme sync failed for wallpaper: $image"
       fi
     fi

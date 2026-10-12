@@ -232,6 +232,8 @@ required_outputs=(
   "$HOME/.config/matugen/themes/starship-colors.toml"
   "$HOME/.config/yazi/theme.toml"
   "$HOME/.config/matugen/themes/obsidian.css"
+  "$HOME/.themes/Matugen/gnome-shell/gnome-shell.css"
+  "$HOME/.cache/wal/colors.json"
 )
 for output in "${required_outputs[@]}"; do
   if [[ ! -f "$output" ]]; then
@@ -310,6 +312,17 @@ update_starship_palette() {
   local palette_block palette_name
 
   [[ -f "$generated" && -f "$config" ]] || return 0
+  # Only select the generated palette when there is one usable managed block
+  # to receive it. Leave unmarked or malformed user configurations intact.
+  if ! awk '
+    /^# BEGIN MATUGEN PALETTE$/ { begins++; inside = 1; next }
+    /^# END MATUGEN PALETTE$/ { ends++; if (!inside) invalid = 1; inside = 0; next }
+    inside && /^\[palettes\.[^]]+\]$/ { palettes++ }
+    END { exit !(begins == 1 && ends == 1 && palettes == 1 && !inside && !invalid) }
+  ' "$config"; then
+    log "Starship has no usable managed palette block; keeping its configuration"
+    return 0
+  fi
   # Every entry of the generated palette, not just the positional colours:
   # Starship resolves a style's colour name through the active palette, so the
   # names its default styles reference (cyan, purple, red, ...) are part of it.
@@ -332,8 +345,8 @@ update_starship_palette() {
       key_done = 1
       next
     }
-    in_keys && !key_done && /^\[/ {
-      print "palette = \"" name "\""
+    in_keys && /^[[:space:]]*\[/ {
+      if (!key_done) print "palette = \"" name "\""
       key_done = 1
       in_keys = 0
     }
@@ -363,6 +376,7 @@ reload_gtk() {
 }
 
 reload_waybar() {
+  local inherited_fd="${!INHERITED_LOCK_FD_ENV:-}"
   pgrep -x waybar >/dev/null 2>&1 || return 0
   # SIGUSR2 only reloads waybar's own style.css; the GTK theme stack (menus,
   # tooltips) is initialized once at process start, so a full restart is
@@ -370,7 +384,15 @@ reload_waybar() {
   # restarted bar survives.
   pkill waybar 2>/dev/null || true
   sleep 0.3
-  setsid waybar >/dev/null 2>&1 &
+  (
+    # A detached bar must not keep either lock alive after this script exits.
+    exec 8>&- 9>&-
+    if [[ "$inherited_fd" =~ ^[0-9]+$ ]] && (( inherited_fd > 2 )); then
+      exec {inherited_fd}>&-
+    fi
+    unset MATUGEN_NIRI_INHERITED_LOCK_FD
+    exec setsid waybar
+  ) >/dev/null 2>&1 &
   disown 2>/dev/null || true
 }
 

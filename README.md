@@ -243,8 +243,10 @@ automatically:
 Waybar, Rofi, Mako, GTK, and Qt are optional. Missing optional applications are
 reported but do not prevent Niri theming; installed applications are reloaded
 when possible, while Rofi and Qt read their theme on their next launch. The
-watcher continues polling the daemon and regenerates only when the selected
-wallpaper changes.
+watcher continues polling the daemon and checks the selected image contents,
+template/config hashes, and required generated files on every poll. Unchanged
+themes skip regeneration; replacing an image at the same path or deleting a
+generated file triggers regeneration.
 
 #### Backups, transactions, and recovery
 
@@ -263,7 +265,15 @@ marker) before replacement or restoration.
 removes the managed Niri/Rofi blocks while preserving unrelated edits, restores
 the original Waybar/Rofi/Mako files, and removes files that were originally
 absent. The original snapshot therefore remains the stable restore point for
-the whole managed lifecycle.
+the whole managed lifecycle. The snapshot covers every Matugen output,
+including shared Kitty, Neovim, Yazi, and Pywalfox files, as well as Starship
+and Kitty configurations rewritten by reload helpers and the synchronization
+cache keys. Starship configurations without a complete managed palette block
+are left unchanged.
+
+Older manifests and interrupted transactions remain recoverable. Targets that
+older versions did not track are first backed up on the next managed apply;
+their pre-upgrade originals cannot be reconstructed retroactively.
 
 `matugen-theme-sync uninstall --de niri --purge` additionally deletes
 `~/.config/matugen` and `~/.cache/matugen-niri`. If `conflicts/` is empty, the

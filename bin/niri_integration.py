@@ -37,7 +37,32 @@ TARGETS = {
     "gtk4-colors": (".config/gtk-4.0/colors.css", "generated"),
     "qt5ct-colors": (".config/qt5ct/colors/matugen.conf", "generated"),
     "qt6ct-colors": (".config/qt6ct/colors/matugen.conf", "generated"),
+    "gnome-shell-colors": (".themes/Matugen/gnome-shell/gnome-shell.css", "generated"),
+    "kitty-colors": (".config/kitty/themes/Matugen.conf", "generated"),
+    "nvim-colors": (".config/nvim/colors/matugen.vim", "generated"),
+    "btop-colors": (".config/btop/themes/matugen.theme", "generated"),
+    "cava-colors": (".config/cava/themes/matugen", "generated"),
+    "tmux-colors": (".config/tmux/generated.conf", "generated"),
+    "zellij-colors": (".config/zellij/themes/matugen.kdl", "generated"),
+    "starship-colors": (".config/matugen/themes/starship-colors.toml", "generated"),
+    "yazi-colors": (".config/yazi/theme.toml", "generated"),
+    "obsidian-colors": (".config/matugen/themes/obsidian.css", "generated"),
+    "pywalfox-colors": (".cache/wal/colors.json", "generated"),
+    # Reload helpers can rewrite these existing application configurations.
+    "starship-config": (".config/starship.toml", "updated"),
+    "kitty-config": (".config/kitty/kitty.conf", "updated"),
+    "kitty-current-theme": (".config/kitty/current-theme.conf", "updated"),
+    "palette-state": (".cache/matugen-niri/last-palette.txt", "updated"),
+    "theme-state": (".cache/matugen-niri/last-theme.txt", "updated"),
 }
+
+# Version 1 snapshots written before shared application targets were tracked.
+LEGACY_TARGETS = frozenset({
+    "niri-config", "niri-colors", "waybar-style", "waybar-colors",
+    "rofi-config", "rofi-theme", "rofi-colors", "mako-config", "mako-colors",
+    "gtk3-import", "gtk3-colors", "gtk4-import", "gtk4-colors",
+    "qt5ct-colors", "qt6ct-colors",
+})
 
 STATIC_SOURCES = {
     "waybar-style": "waybar/style.css",
@@ -282,9 +307,11 @@ class NiriIntegration:
     def _sync_generated_targets(self) -> None:
         self._assert_safe_targets()
         for key, (_, kind) in TARGETS.items():
-            if kind != "generated":
+            if kind not in {"generated", "updated"}:
                 continue
             target = self._target_path(key)
+            if kind == "updated" and not target.exists():
+                continue
             if not target.exists() or not target.is_file():
                 raise IntegrationError(
                     f"managed target is not a regular file: {target}"
@@ -308,9 +335,9 @@ class NiriIntegration:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise IntegrationError("transaction snapshot is incomplete") from error
-        if set(metadata) != set(TARGETS):
+        if set(metadata) not in (set(TARGETS), LEGACY_TARGETS):
             raise IntegrationError("transaction snapshot does not cover all targets")
-        for key in TARGETS:
+        for key in metadata:
             target = self._target_path(key)
             entry = metadata[key]
             if entry.get("exists"):
@@ -561,7 +588,7 @@ class NiriIntegration:
                 (self.transaction / "metadata.json").read_text(encoding="utf-8")
             )
             for key, (_, kind) in TARGETS.items():
-                if kind not in {"static", "patched"}:
+                if kind not in {"static", "patched", "updated"}:
                     continue
                 target = self._target_path(key)
                 entry = manifest["targets"][key]
@@ -646,6 +673,8 @@ class NiriIntegration:
             "rofi-config": (ROFI_BEGIN, ROFI_END),
         }
         for key, (begin, end) in blocks.items():
+            if key not in targets:
+                continue
             entry = targets[key]
             target = self._target_path(key)
             if entry.get("restore_original_on_uninstall"):
@@ -677,11 +706,11 @@ class NiriIntegration:
                 )
 
         for key, (_, kind) in TARGETS.items():
-            if kind == "patched":
+            if kind == "patched" or key not in targets:
                 continue
             entry = targets[key]
             target = self._target_path(key)
-            if kind == "static":
+            if kind in {"static", "updated"}:
                 self._archive_if_changed(key, target, entry)
             self._restore_original(key, entry)
 

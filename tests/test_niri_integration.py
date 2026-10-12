@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import unittest
 import zlib
 from pathlib import Path
@@ -690,7 +691,7 @@ class NiriIntegrationTests(unittest.TestCase):
         real_fsync_directory = self.manager._fsync_directory
         real_atomic_write = self.manager._atomic_write
         keys_by_path = {path: key for key, path in generated.items()}
-        keys_by_parent = {path.parent: key for key, path in generated.items()}
+        generated_parents = {path.parent for path in generated.values()}
 
         def record_file(path):
             events.append(f"file:{keys_by_path[Path(path)]}")
@@ -698,8 +699,8 @@ class NiriIntegrationTests(unittest.TestCase):
 
         def record_directory(path):
             path = Path(path)
-            if path in keys_by_parent:
-                events.append(f"dir:{keys_by_parent[path]}")
+            if path in generated_parents:
+                events.append(f"dir:{path}")
             return real_fsync_directory(path)
 
         def record_atomic_write(path, data, mode=0o644):
@@ -725,6 +726,17 @@ class NiriIntegrationTests(unittest.TestCase):
             "gtk4-colors",
             "qt5ct-colors",
             "qt6ct-colors",
+            "gnome-shell-colors",
+            "kitty-colors",
+            "nvim-colors",
+            "btop-colors",
+            "cava-colors",
+            "tmux-colors",
+            "zellij-colors",
+            "starship-colors",
+            "yazi-colors",
+            "obsidian-colors",
+            "pywalfox-colors",
         )
         self.assertEqual(
             tuple(
@@ -737,9 +749,75 @@ class NiriIntegrationTests(unittest.TestCase):
         expected_events = [
             event
             for key in expected_keys
-            for event in (f"file:{key}", f"dir:{key}")
+            for event in (f"file:{key}", f"dir:{generated[key].parent}")
         ] + ["journal"]
         self.assertEqual(events, expected_events)
+
+    def test_every_matugen_output_is_in_the_transaction(self):
+        config = tomllib.loads((ROOT / "matugen/config-niri.toml").read_text())
+        tracked = {relative for relative, _ in MODULE.TARGETS.values()}
+        for template in config["templates"].values():
+            self.assertIn(template["output_path"].removeprefix("~/"), tracked)
+
+    def test_shared_application_files_are_restored_on_rollback_and_uninstall(self):
+        keys = (
+            "kitty-colors", "nvim-colors", "yazi-colors", "pywalfox-colors",
+            "starship-config", "kitty-config", "kitty-current-theme",
+            "palette-state", "theme-state",
+        )
+        for operation in ("rollback", "restore"):
+            with self.subTest(operation=operation):
+                originals = {}
+                for index, key in enumerate(keys):
+                    path = self.home / MODULE.TARGETS[key][0]
+                    if index % 2:
+                        path.unlink(missing_ok=True)
+                        originals[key] = None
+                    else:
+                        self.write(MODULE.TARGETS[key][0], f"original-{key}")
+                        originals[key] = path.read_bytes()
+                self.manager.begin()
+                self.manager.deploy_static()
+                self.manager.activate()
+                self.write_missing_generated_targets()
+                for key in keys:
+                    self.write(MODULE.TARGETS[key][0], f"modified-{key}")
+                if operation == "restore":
+                    self.manager.commit()
+                    self.manager.restore()
+                else:
+                    self.manager.rollback()
+                    # End the first lifecycle so the next case takes new originals.
+                    self.manager.restore()
+                for key, original in originals.items():
+                    path = self.home / MODULE.TARGETS[key][0]
+                    if original is None:
+                        self.assertFalse(path.exists(), key)
+                    else:
+                        self.assertEqual(path.read_bytes(), original, key)
+
+    def test_legacy_snapshot_recovers_without_touching_new_targets(self):
+        self.write(".config/yazi/theme.toml", "pre-upgrade")
+        self.manager.begin()
+        metadata_path = self.manager.transaction / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata_path.write_text(json.dumps({k: v for k, v in metadata.items() if k in MODULE.LEGACY_TARGETS}))
+        manifest = self.manager._load_manifest()
+        manifest["targets"] = {k: v for k, v in manifest["targets"].items() if k in MODULE.LEGACY_TARGETS}
+        self.manager._write_manifest(manifest)
+        self.manager._release_lifecycle_lock()
+        self.manager.begin()
+        self.assertEqual((self.home / ".config/yazi/theme.toml").read_text(), "pre-upgrade")
+        self.assertEqual(set(self.manager._load_manifest()["targets"]), set(MODULE.TARGETS))
+        self.manager.rollback()
+
+    def test_uninstall_accepts_a_legacy_manifest(self):
+        self.apply_and_commit()
+        manifest = self.manager._load_manifest()
+        manifest["targets"] = {k: v for k, v in manifest["targets"].items() if k in MODULE.LEGACY_TARGETS}
+        self.manager._write_manifest(manifest)
+        self.manager.restore()
+        self.assertFalse(self.manager.manifest_path.exists())
 
     def test_targets_include_gtk_and_qt(self):
         targets = MODULE.TARGETS

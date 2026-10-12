@@ -42,6 +42,8 @@ REQUIRED_OUTPUTS = (
     ".config/matugen/themes/starship-colors.toml",
     ".config/yazi/theme.toml",
     ".config/matugen/themes/obsidian.css",
+    ".themes/Matugen/gnome-shell/gnome-shell.css",
+    ".cache/wal/colors.json",
 )
 
 # What matugen writes for this run: positional colours plus the names
@@ -286,6 +288,96 @@ done <<< "$REQUIRED_OUTPUTS"
             "MATUGEN_NIRI_NO_RELOAD": "1",
             "REQUIRED_OUTPUTS": "\n".join(REQUIRED_OUTPUTS),
         }
+
+    def test_background_waybar_does_not_retain_apply_or_inherited_locks(self):
+        self.write_tool("pgrep", '#!/bin/bash\n[[ "$2" == waybar ]]\n')
+        self.write_tool("pkill", "#!/bin/bash\nexit 0\n")
+        self.write_tool("gsettings", "#!/bin/bash\nexit 0\n")
+        self.write_tool("tmux", "#!/bin/bash\nexit 1\n")
+        pid_file = self.home / "waybar.pid"
+        self.write_tool("waybar", '#!/bin/bash\necho $$ > "$HOME/waybar.pid"\nexec sleep 30\n')
+        for inherited in (False, True):
+            with self.subTest(inherited=inherited):
+                pid_file.unlink(missing_ok=True)
+                manager = INTEGRATION.NiriIntegration(
+                    self.home, self.base / "state", ROOT / "niri"
+                )
+                if inherited:
+                    manager.begin()
+                env = os.environ | {
+                    "HOME": str(self.home),
+                    "PATH": f"{self.tools}:{os.environ['PATH']}",
+                    "XDG_STATE_HOME": str(self.base / "state"),
+                    **{k: str(v) for k, v in self.generation_env().items()},
+                    "MATUGEN_NIRI_NO_RELOAD": "0",
+                }
+                kwargs = manager.bootstrap_subprocess_kwargs(env) if inherited else {"env": env}
+                pid = None
+                try:
+                    result = subprocess.run(
+                        ["bash", str(SCRIPT), "manual", "--force", str(self.spaced)],
+                        capture_output=True, text=True, timeout=5, **kwargs,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    deadline = time.monotonic() + 2
+                    while not pid_file.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    pid = int(pid_file.read_text())
+                    if inherited:
+                        manager.rollback()
+                    for lock in (manager.lock_path, self.home / ".cache/matugen-niri/apply.lock"):
+                        with lock.open("a") as stream:
+                            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    # A second apply must complete while the detached bar is alive.
+                    result = subprocess.run(
+                        ["bash", str(SCRIPT), "manual", "--force", str(self.spaced)],
+                        env=env | {"MATUGEN_NIRI_NO_RELOAD": "1"},
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                finally:
+                    if pid is not None:
+                        os.kill(pid, 15)
+                    if manager._lock_descriptor is not None:
+                        manager.rollback()
+
+    def test_watcher_regenerates_same_path_edits_and_repairs_missing_outputs(self):
+        self.write_tool("pgrep", "#!/bin/bash\nexit 0\n")
+        query_count = self.base / "queries"
+        generation_count = self.base / "generations"
+        matugen = self.tools / "matugen"
+        matugen.write_text(matugen.read_text().replace(
+            "printf '<%s>", 'echo generated >> "$GENERATION_COUNT"\nprintf \'<%s>', 1
+        ))
+        wrapper = self.write_tool("watch-apply", '''#!/bin/bash
+if [[ "$1" == --print-wallpaper ]]; then
+  count=0
+  [[ -f "$QUERY_COUNT" ]] && count="$(<"$QUERY_COUNT")"
+  (( count += 1 ))
+  echo "$count" > "$QUERY_COUNT"
+  if (( count == 2 )); then echo replacement > "$IMAGE"; fi
+  if (( count == 3 )); then rm "$HOME/.cache/wal/colors.json"; fi
+  echo "$IMAGE"
+else
+  exec bash "$APPLY_SCRIPT" "$@"
+fi
+''')
+        env = os.environ | {
+            "HOME": str(self.home), "PATH": f"{self.tools}:{os.environ['PATH']}",
+            "XDG_STATE_HOME": str(self.base / "state"),
+            **{k: str(v) for k, v in self.generation_env().items()},
+            "MATUGEN_NIRI_APPLY": str(wrapper), "MATUGEN_NIRI_WATCH_INTERVAL": "0",
+            "MATUGEN_NIRI_WATCH_MAX_POLLS": "4", "IMAGE": str(self.spaced),
+            "QUERY_COUNT": str(query_count), "GENERATION_COUNT": str(generation_count),
+            "APPLY_SCRIPT": str(SCRIPT),
+        }
+        result = subprocess.run(
+            ["bash", str(WATCHER)], env=env, capture_output=True, text=True, timeout=5
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(generation_count.read_text().splitlines(), ["generated"] * 3)
+        self.assertTrue((self.home / ".cache/wal/colors.json").is_file())
+        self.assertIn("skipping theme regeneration", result.stdout)
 
     def test_explicit_wallpaper_with_spaces_is_one_matugen_argument_and_writes_state(self):
         result = self.run_script("manual", str(self.spaced), **self.generation_env())
@@ -620,7 +712,7 @@ fi
             return []
         return self.calls.read_text(encoding="utf-8").splitlines()
 
-    def test_applies_only_new_wallpapers_and_preserves_spaced_path(self):
+    def test_checks_every_wallpaper_and_preserves_spaced_path(self):
         first = "/wallpapers/one with spaces.png"
         second = "/wallpapers/two.png"
         result = self.run_watcher(f"{first}\n{first}\n{second}\n", 3)
@@ -628,7 +720,7 @@ fi
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             self.call_lines(),
-            ["<wallpaper>", f"<{first}>", "<wallpaper>", f"<{second}>"],
+            ["<wallpaper>", f"<{first}>", "<wallpaper>", f"<{first}>", "<wallpaper>", f"<{second}>"],
         )
 
     def test_failed_and_empty_queries_leave_last_applied_wallpaper_unchanged(self):
@@ -636,7 +728,7 @@ fi
         result = self.run_watcher(f"{first}\n__FAIL__\n\n{first}\n", 4)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.call_lines(), ["<wallpaper>", f"<{first}>"])
+        self.assertEqual(self.call_lines(), ["<wallpaper>", f"<{first}>"] * 2)
 
     def test_failed_apply_is_retried_for_the_same_wallpaper(self):
         image = "/wallpapers/one.png"
@@ -866,6 +958,29 @@ class NiriStarshipPaletteTests(NiriApplyTestCase):
         result = self.apply()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.starship_config()["palette"], "matugen")
+
+    def test_unmarked_or_malformed_configuration_is_unchanged(self):
+        for source in (
+            '[character]\nsuccess_symbol = "ok"\n',
+            'palette = "custom"\n[palettes.custom]\ncyan = "#123456"\n',
+            '# BEGIN MATUGEN PALETTE\n[palettes.matugen]\ncyan = "#123456"\n',
+            '# BEGIN MATUGEN PALETTE\n# END MATUGEN PALETTE\n',
+            STARSHIP_CONF + '# BEGIN MATUGEN PALETTE\n# END MATUGEN PALETTE\n',
+        ):
+            with self.subTest(source=source):
+                self.starship.write_text(source)
+                result = self.run_script(
+                    "manual", "--force", str(self.spaced),
+                    REQUIRED_OUTPUTS="\n".join(REQUIRED_OUTPUTS),
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.read_starship(), source)
+
+    def test_table_local_palette_key_is_preserved(self):
+        self.starship.write_text(STARSHIP_CONF.replace('[azure]\n', '[azure]\npalette = "local"\n'))
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.starship_config()["azure"]["palette"], "local")
 
     def test_generated_entries_replace_the_managed_block(self):
         result = self.apply()
