@@ -67,7 +67,7 @@ class GtkTemplateTest(unittest.TestCase):
             "window_fg_color": "{{colors.on_surface.default.hex}}",
             "view_bg_color": "{{colors.surface.default.hex}}",
             "view_fg_color": "{{colors.on_surface.default.hex}}",
-            "headerbar_bg_color": "{{colors.surface_container.default.hex}}",
+            "headerbar_bg_color": "{{colors.surface.default.hex}}",
             "sidebar_bg_color": "{{colors.surface_container.default.hex}}",
             "card_bg_color": "{{colors.surface.default.hex}}",
             "dialog_bg_color": "{{colors.surface_container_low.default.hex}}",

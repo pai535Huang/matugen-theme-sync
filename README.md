@@ -102,6 +102,12 @@ The colour scheme selected in System Settings (`MatugenLight` or
 to wallpaper changes and re-applies every managed application from the same
 palette; a non-Matugen scheme disables synchronization.
 
+The watcher forces a refresh when Plasma starts, restoring application themes
+that another desktop may have overwritten. An explicit `apply --de plasma`
+restores the last successful Matugen light/dark mode when the selected scheme
+belongs to another theme. Remote wallpaper images are cached by URL so returning
+to Plasma or switching modes does not require downloading the same image again.
+
 #### Managed application themes
 
 - GTK 3 and GTK 4 receive generated `~/.config/gtk-3.0/{gtk.css,colors.css}`

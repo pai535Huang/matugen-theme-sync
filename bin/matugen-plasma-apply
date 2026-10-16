@@ -217,20 +217,29 @@ PYEOF
 }
 
 resolve_image() {
-  local source="$1" local_image="${1#img:}" extension url
+  local source="$1" local_image="${1#img:}" extension url url_id download
   if [[ "$local_image" == http* ]]; then
     url="$local_image"
     extension="${url##*.}"
     extension="${extension%%\?*}"
     [[ "$extension" =~ ^(jpg|jpeg|png|webp|bmp)$ ]] || extension="jpg"
-    local_image="$STATE_DIR/current.$extension"
-    if ! curl -fsSL --max-time 40 "$url" -o "$local_image" 2>/dev/null; then
-      log "Failed to download wallpaper: $source"
-      return 1
+    # Login and light/dark switches must not depend on downloading the same
+    # wallpaper again. Key by URL so a failed new download cannot reuse an
+    # unrelated wallpaper, and publish only complete downloads.
+    url_id="$(printf '%s' "$url" | sha256sum | cut -d' ' -f1)"
+    local_image="$STATE_DIR/remote-$url_id.$extension"
+    if [[ ! -s "$local_image" ]]; then
+      download="$(mktemp "$STATE_DIR/download.XXXXXX")" || return 1
+      if ! curl -fsSL --max-time 40 "$url" -o "$download" || [[ ! -s "$download" ]]; then
+        rm -f "$download"
+        log "Failed to download wallpaper: $source" >&2
+        return 1
+      fi
+      mv -f "$download" "$local_image" || return 1
     fi
   fi
   if [[ ! -f "$local_image" ]]; then
-    log "Wallpaper file not found: $local_image"
+    log "Wallpaper file not found: $local_image" >&2
     return 1
   fi
 

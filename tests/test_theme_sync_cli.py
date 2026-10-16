@@ -22,6 +22,25 @@ MODULE = importlib.util.module_from_spec(SPEC)
 LOADER.exec_module(MODULE)
 
 
+class PlasmaBootstrapTests(unittest.TestCase):
+    def test_return_from_another_desktop_restores_last_successful_mode(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+            MODULE, "STATE_DIR", Path(tmp)
+        ), mock.patch.object(MODULE, "kde_current_mode", return_value=None):
+            (Path(tmp) / "last-theme.txt").write_text("wallpaper:templates:light\n")
+            self.assertEqual(
+                MODULE.bootstrap_command(MODULE.DE_PLASMA)[1:],
+                ["light", "manual", "--force"],
+            )
+
+    def test_selected_matugen_mode_wins_over_saved_mode(self):
+        with mock.patch.object(MODULE, "kde_current_mode", return_value="dark"):
+            self.assertEqual(
+                MODULE.bootstrap_command(MODULE.DE_PLASMA)[1:],
+                ["dark", "manual", "--force"],
+            )
+
+
 class DesktopDetectionTests(unittest.TestCase):
     def test_niri_socket_wins_over_mixed_desktop_hints(self):
         with mock.patch.dict(

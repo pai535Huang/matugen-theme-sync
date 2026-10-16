@@ -330,6 +330,40 @@ class PlasmaApplyTestCase(unittest.TestCase):
         )
 
 
+class RemoteWallpaperTests(PlasmaApplyTestCase):
+    def setUp(self):
+        super().setUp()
+        self.appletsrc = self.home / ".config/plasma-org.kde.plasma.desktop-appletsrc"
+        self.appletsrc.write_text(self.appletsrc.read_text().replace(
+            f"file://{self.wallpaper}", "https://example.test/wall.png"
+        ))
+        self.write_tool("curl", '''#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$LOG_DIR/curl.log"
+while [[ "$1" != -o ]]; do shift; done
+printf 'wallpaper' > "$2"
+exit "${CURL_STATUS:-0}"
+''')
+
+    def test_same_wallpaper_can_switch_modes_without_network(self):
+        first = self.apply_light()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        second = self.apply_dark(CURL_STATUS=7)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertEqual(len(self.read_log("curl").splitlines()), 1)
+        self.assertEqual(self.read_settings()["gtk-theme-name"], "adw-gtk3-dark")
+
+    def test_failed_new_wallpaper_does_not_replace_or_reuse_cached_image(self):
+        self.assertEqual(self.apply_light().returncode, 0)
+        self.appletsrc.write_text(self.appletsrc.read_text().replace("wall.png", "new.png"))
+        result = self.apply_dark(CURL_STATUS=7)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Failed to download wallpaper", result.stderr)
+        cache = self.home / ".cache/matugen-plasma"
+        self.assertEqual(len(list(cache.glob("remote-*.png"))), 1)
+        self.assertEqual(list(cache.glob("download.*")), [])
+        self.assertEqual(self.read_settings()["gtk-theme-name"], "adw-gtk3")
+
+
 class KittyReloadTests(PlasmaApplyTestCase):
     def test_reload_materializes_theme_and_signals_without_kitten(self):
         result = self.apply_light()

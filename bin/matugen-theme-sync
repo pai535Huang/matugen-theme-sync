@@ -277,7 +277,16 @@ def check_dependencies(de):
 
 def bootstrap_command(de):
     if de == DE_PLASMA:
-        mode = kde_current_mode() or "dark"
+        mode = kde_current_mode()
+        if mode is None:
+            # Another desktop may have replaced KDE's scheme with Noctalia.
+            # Restore the last successful Matugen mode rather than switching
+            # every returning Plasma session to dark.
+            try:
+                previous = (STATE_DIR / "last-theme.txt").read_text().strip().rsplit(":", 1)[-1]
+            except OSError:
+                previous = ""
+            mode = previous if previous in ("light", "dark") else "dark"
         return [str(LOCAL_BIN / "matugen-plasma-apply"), mode, "manual", "--force"]
     if de == DE_NIRI:
         return [str(LOCAL_BIN / "matugen-niri-apply"), "manual", "--force"]

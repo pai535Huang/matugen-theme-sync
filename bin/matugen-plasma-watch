@@ -52,7 +52,7 @@ apply_for_event() {
 mode="$(current_mode)" || mode=""
 last_mode="$mode"
 if [[ -n "$mode" ]]; then
-  "$APPLY" startup || log "Startup theme sync failed"
+  "$APPLY" startup --force || log "Startup theme sync failed"
 else
   log "Select MatugenLight or MatugenDark to enable global theme synchronization"
 fi
